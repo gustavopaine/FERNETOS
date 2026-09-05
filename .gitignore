@@ -8,3 +8,4 @@ data/*.db
 data/*.db-journal
 data/*_backup_*.db
 .streamlit/
+.claude/
