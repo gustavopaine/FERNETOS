@@ -146,25 +146,10 @@ class TinturaSQLRepository:
                 "aroma_descripcion": registro.aroma_descripcion,
                 "momento_optimo": 1 if registro.momento_optimo_candidato else 0,
             }
-            query = """
-            INSERT INTO registros_curva 
-            (tintura_id, dia, fecha, intensidad, notas_sensoriales, color, turbidez, 
-             aroma_descripcion, momento_optimo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            cursor_result = self.db.ejecutar(query, tuple(reg_data.values()))
-
-            # Obtener ID del registro insertado (manejar diferentes formatos de retorno)
-            registro_id = None
-            if isinstance(cursor_result, list) and cursor_result:
-                # Intentar obtener el último ID insertado
-                with self.db.get_connection() as conn:
-                    cursor = conn.execute("SELECT last_insert_rowid()")
-                    row = cursor.fetchone()
-                    if row:
-                        registro_id = row[0]
-            elif hasattr(cursor_result, "lastrowid"):
-                registro_id = cursor_result.lastrowid
+            # insertar() ejecuta el INSERT y devuelve cursor.lastrowid dentro de la
+            # misma conexión: last_insert_rowid() es por-conexión, así que pedirlo
+            # en una conexión nueva (como se hacía antes) siempre daba 0.
+            registro_id = self.db.insertar("registros_curva", reg_data)
 
             if registro_id:
                 # Guardar compuestos detectados
@@ -369,5 +354,5 @@ class TinturaSQLRepository:
             bool: True si se eliminó
         """
         # Las foreign keys con ON DELETE CASCADE se encargan del resto
-        result = self.db.ejecutar("DELETE FROM tinturas WHERE id = ?", (tintura_id,))
-        return bool(result)
+        filas_eliminadas = self.db.eliminar_filas("tinturas", "id = ?", (tintura_id,))
+        return filas_eliminadas > 0

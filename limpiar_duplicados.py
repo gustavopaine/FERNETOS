@@ -3,29 +3,32 @@
 Script para limpiar tinturas duplicadas (opcional)
 """
 
-import sqlite3
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from modules.core.db_manager import DatabaseManager
+from modules.tinturas.repository_sql import TinturaSQLRepository
 
 
 def limpiar_duplicados():
     """Elimina tinturas duplicadas manteniendo las más recientes"""
 
-    db_path = "data/fernetos.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    db = DatabaseManager()
+    repo = TinturaSQLRepository(db)
 
     print("🔍 Buscando duplicados...")
 
     # Encontrar grupos de nombres duplicados
-    cursor = conn.execute(
+    duplicados = db.ejecutar(
         """
-        SELECT nombre, COUNT(*) as count, MIN(id) as primer_id
+        SELECT nombre, COUNT(*) as count
         FROM tinturas
         GROUP BY nombre
         HAVING count > 1
-    """
+        """
     )
-
-    duplicados = cursor.fetchall()
 
     if not duplicados:
         print("✅ No hay duplicados")
@@ -37,25 +40,23 @@ def limpiar_duplicados():
         print(f"\n   • {dup['nombre']} ({dup['count']} copias)")
 
         # Mantener el más reciente (por ID), eliminar los otros
-        cursor = conn.execute(
+        a_eliminar = db.ejecutar(
             """
-            SELECT id FROM tinturas 
-            WHERE nombre = ? 
-            ORDER BY id DESC 
+            SELECT id FROM tinturas
+            WHERE nombre = ?
+            ORDER BY id DESC
             LIMIT ? OFFSET 1
-        """,
+            """,
             (dup["nombre"], dup["count"] - 1),
         )
 
-        a_eliminar = cursor.fetchall()
-
         for t in a_eliminar:
             print(f"     Eliminando: {t['id']}")
-            conn.execute("DELETE FROM tinturas WHERE id = ?", (t["id"],))
+            # Vía el repositorio: mismo camino de borrado que usa la app,
+            # con PRAGMA foreign_keys activado y cascada real a los hijos.
+            repo.eliminar(t["id"])
 
-    conn.commit()
     print("\n✅ Limpieza completada")
-    conn.close()
 
 
 if __name__ == "__main__":

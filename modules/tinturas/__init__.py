@@ -4,7 +4,6 @@ from modules.tinturas.models import (
     ComposicionBotanica,
     EstadoTintura,
 )
-from modules.tinturas.repository import TinturaRepository
 from modules.tinturas.repository_sql import TinturaSQLRepository
 
 __all__ = [
@@ -12,6 +11,5 @@ __all__ = [
     "GrupoFuncional",
     "ComposicionBotanica",
     "EstadoTintura",
-    "TinturaRepository",
     "TinturaSQLRepository",
 ]

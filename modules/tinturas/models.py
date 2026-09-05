@@ -180,6 +180,15 @@ class Tintura:
 
     def __post_init__(self):
         """Validaciones y cálculos automáticos"""
+        from utils.validators import (
+            validar_composicion_botanica,
+            validar_parametros_extraccion,
+        )
+
+        validar_composicion_botanica(self.composicion)
+        if self.parametros is not None:
+            validar_parametros_extraccion(self.parametros)
+
         if self.fecha_inicio is None:
             self.fecha_inicio = datetime.now()
 

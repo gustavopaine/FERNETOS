@@ -171,6 +171,7 @@ class DatabaseManager:
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
+        conn.execute("PRAGMA foreign_keys = ON")  # SQLite no lo activa por defecto
         try:
             yield conn
         finally:
@@ -245,5 +246,24 @@ class DatabaseManager:
 
         with self.get_connection() as conn:
             cursor = conn.execute(query, params)
+            conn.commit()
+            return cursor.rowcount
+
+    def eliminar_filas(self, tabla: str, where: str, where_params: tuple = ()) -> int:
+        """
+        Elimina registros de una tabla.
+
+        Args:
+            tabla: Nombre de la tabla
+            where: Condición WHERE
+            where_params: Parámetros para la condición WHERE
+
+        Returns:
+            int: Número de filas eliminadas
+        """
+        query = f"DELETE FROM {tabla} WHERE {where}"
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, where_params)
             conn.commit()
             return cursor.rowcount

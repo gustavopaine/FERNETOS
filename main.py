@@ -19,7 +19,8 @@ from modules.tinturas.models import (
     ComposicionBotanica,
     ParametrosExtraccion,
 )
-from modules.tinturas.repository import TinturaRepository  # Asumimos que existe
+from modules.core.db_manager import DatabaseManager
+from modules.tinturas.repository_sql import TinturaSQLRepository
 from modules.curvas.analyzer import CurveAnalyzer, CurveVisualizer
 from modules.ensamblaje.calculator import FernetCalculator, BlendParams
 from modules.microblending.pilot_batch import PilotBatch
@@ -32,7 +33,7 @@ class FernetOS:
 
     def __init__(self):
         self.config = load_settings()
-        self.tinturas_repo = TinturaRepository()
+        self.tinturas_repo = TinturaSQLRepository(DatabaseManager())
         self.calculator = FernetCalculator(self.tinturas_repo)
         self.curve_visualizer = CurveVisualizer()
         self.ab_testing = ABTesting()
@@ -125,7 +126,7 @@ class FernetOS:
         )
 
         tintura.agregar_registro_extraccion(registro)
-        self.tinturas_repo.actualizar(tintura)
+        self.tinturas_repo.guardar(tintura)
 
         print(f"✅ Registro día {args.dia} añadido a tintura {args.tintura_id}")
 
