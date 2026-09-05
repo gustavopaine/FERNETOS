@@ -1,0 +1,310 @@
+"""
+Módulo de modelos para el sistema de gestión de tinturas.
+Define las estructuras de datos fundamentales para el registro y control de tinturas.
+"""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional, Dict, List, Any
+from enum import Enum
+import uuid
+import json
+
+
+class GrupoFuncional(Enum):
+    """Grupos funcionales de tinturas según su rol en el fernet"""
+
+    AMARGOS_ESTRUCTURALES = "amargos_estructurales"
+    AROMATICA_ALTA = "aromatica_alta"
+    ESPECIAS_CALIDAS = "especias_calidas"
+    CITRICOS = "citricos"
+    CORRECTIVOS = "correctivos"  # Regaliz, clavo controlado, etc.
+    EXPERIMENTAL = "experimental"
+
+
+class EstadoTintura(Enum):
+    """Estados del ciclo de vida de una tintura"""
+
+    EN_MACERACION = "en_maceracion"
+    EN_ESTABILIZACION = "en_estabilizacion"
+    LISTA = "lista"
+    AGOTADA = "agotada"
+    DESCARTADA = "descartada"
+
+
+@dataclass
+class ComposicionBotanica:
+    """Composición de hierbas en una tintura"""
+
+    especie: str  # Nombre científico o común estandarizado
+    porcentaje: float  # Porcentaje sobre el total de materia seca (0-100)
+    parte_utilizada: str  # "raiz", "corteza", "hoja", "flor", "semilla", "cascara"
+    lote_origen: Optional[str] = None  # Para trazabilidad
+
+    def to_dict(self) -> Dict:
+        return {
+            "especie": self.especie,
+            "porcentaje": self.porcentaje,
+            "parte_utilizada": self.parte_utilizada,
+            "lote_origen": self.lote_origen,
+        }
+
+
+@dataclass
+class ParametrosExtraccion:
+    """Parámetros técnicos de la extracción"""
+
+    abv_objetivo: float = 70.0  # % ABV del alcohol utilizado
+    ratio_planta_alcohol: float = 0.2  # Ej: 0.2 para 1:5 (1kg/5L)
+    temperatura_maceracion: float = 20.0  # °C
+    agitacion_diaria: bool = True
+    tiempo_estimado_dias: int = 21
+    proteccion_luz: bool = True
+    recipiente_material: str = (
+        "vidrio"  # "vidrio", "acero_inox", "plastico_grado_alimenticio"
+    )
+
+    def to_dict(self) -> Dict:
+        return {
+            "abv_objetivo": self.abv_objetivo,
+            "ratio_planta_alcohol": self.ratio_planta_alcohol,
+            "temperatura_maceracion": self.temperatura_maceracion,
+            "agitacion_diaria": self.agitacion_diaria,
+            "tiempo_estimado_dias": self.tiempo_estimado_dias,
+            "proteccion_luz": self.proteccion_luz,
+            "recipiente_material": self.recipiente_material,
+        }
+
+
+@dataclass
+class RegistroExtraccion:
+    """
+    Registro puntual de una cata durante la maceración.
+    Permite construir la curva de extracción.
+    """
+
+    dia: int
+    fecha: datetime
+    intensidad_estimada: int  # 0-100 (escala sensorial)
+    notas_sensoriales: str
+    compuestos_detectados: List[
+        str
+    ]  # ["glucosidos", "taninos", "terpenos", "eugenol", etc.]
+    color: str = ""  # Descripción del color
+    turbidez: str = ""  # "claro", "ligera", "alta"
+    aroma_descripcion: str = ""
+    momento_optimo_candidato: bool = False
+
+    def to_dict(self) -> Dict:
+        return {
+            "dia": self.dia,
+            "fecha": self.fecha.isoformat(),
+            "intensidad": self.intensidad_estimada,
+            "notas": self.notas_sensoriales,
+            "compuestos": self.compuestos_detectados,
+            "color": self.color,
+            "turbidez": self.turbidez,
+            "aroma": self.aroma_descripcion,
+            "optimo_candidato": self.momento_optimo_candidato,
+        }
+
+
+@dataclass
+class ControlCalidad:
+    """Resultados de controles de calidad post-maceración"""
+
+    ph: Optional[float] = None
+    densidad: Optional[float] = None  # g/ml
+    turbidez_ntu: Optional[float] = None  # Unidades Nefelométricas de Turbidez
+    alcohol_medido: Optional[float] = None  # % ABV real
+    observaciones_filtrado: str = ""
+    rendimiento_volumen_ml: Optional[float] = None  # Volumen obtenido post-filtrado
+
+    def to_dict(self) -> Dict:
+        return {
+            "ph": self.ph,
+            "densidad": self.densidad,
+            "turbidez_ntu": self.turbidez_ntu,
+            "alcohol_medido": self.alcohol_medido,
+            "observaciones_filtrado": self.observaciones_filtrado,
+            "rendimiento_ml": self.rendimiento_volumen_ml,
+        }
+
+
+@dataclass
+class Tintura:
+    """
+    Modelo principal de tintura.
+    Representa una extracción completa con todo su ciclo de vida.
+    """
+
+    # Identificación
+    id: str = field(
+        default_factory=lambda: f"T-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
+    )
+    nombre: str = ""
+    grupo_funcional: Optional[GrupoFuncional] = None
+    version: str = "1.0.0"
+
+    # Composición
+    composicion: List[ComposicionBotanica] = field(default_factory=list)
+    peso_total_materia_seca_g: float = 0.0
+    volumen_alcohol_ml: float = 0.0
+
+    # Parámetros de extracción
+    parametros: Optional[ParametrosExtraccion] = None
+
+    # Fechas y tiempos
+    fecha_inicio: Optional[datetime] = None
+    fecha_corte_estimada: Optional[datetime] = None
+    fecha_corte_real: Optional[datetime] = None
+    fecha_estabilizacion_fin: Optional[datetime] = None
+
+    # Registros de evolución
+    registros_extraccion: List[RegistroExtraccion] = field(default_factory=list)
+    control_calidad: Optional[ControlCalidad] = None
+
+    # Estado y observaciones
+    estado: EstadoTintura = EstadoTintura.EN_MACERACION
+    observaciones_iniciales: str = ""
+    observaciones_finales: str = ""
+
+    # Stock
+    volumen_disponible_ml: float = 0.0
+    ubicacion_almacen: str = ""
+    notas_internas: str = ""
+
+    # Metadatos
+    creado_por: str = "sistema"
+    tags: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        """Validaciones y cálculos automáticos"""
+        if self.fecha_inicio is None:
+            self.fecha_inicio = datetime.now()
+
+        if (
+            not self.fecha_corte_estimada
+            and self.parametros
+            and self.parametros.tiempo_estimado_dias
+        ):
+            from datetime import timedelta
+
+            self.fecha_corte_estimada = self.fecha_inicio + timedelta(
+                days=self.parametros.tiempo_estimado_dias
+            )
+
+    @property
+    def dias_transcurridos(self) -> int:
+        """Días desde inicio de maceración"""
+        if not self.fecha_inicio:
+            return 0
+
+        if self.estado == EstadoTintura.EN_MACERACION:
+            return max(0, (datetime.now() - self.fecha_inicio).days)
+        elif self.fecha_corte_real:
+            return max(0, (self.fecha_corte_real - self.fecha_inicio).days)
+        return 0
+
+    @property
+    def ratio_efectivo(self) -> float:
+        """Ratio planta/alcohol real (g/ml)"""
+        if self.volumen_alcohol_ml > 0:
+            return self.peso_total_materia_seca_g / self.volumen_alcohol_ml
+        return 0.0
+
+    def agregar_registro_extraccion(self, registro: RegistroExtraccion) -> None:
+        """Añade un registro de cata a la curva de extracción"""
+        self.registros_extraccion.append(registro)
+        # Ordenar por día
+        self.registros_extraccion.sort(key=lambda x: x.dia)
+
+    def finalizar_maceracion(self, fecha_corte: Optional[datetime] = None) -> None:
+        """Marca la tintura como lista para filtrado/estabilización"""
+        self.fecha_corte_real = fecha_corte or datetime.now()
+        self.estado = EstadoTintura.EN_ESTABILIZACION
+
+    def estabilizar(
+        self, dias_estabilizacion: int = 15, temperatura: float = 5.0
+    ) -> None:
+        """Inicia proceso de estabilización en frío"""
+        from datetime import timedelta
+
+        self.fecha_estabilizacion_fin = datetime.now() + timedelta(
+            days=dias_estabilizacion
+        )
+        self.observaciones_finales += (
+            f"\nEstabilización: {dias_estabilizacion} días a {temperatura}°C"
+        )
+
+    def marcar_como_lista(self, volumen_final_ml: float) -> None:
+        """Marca la tintura como disponible para uso"""
+        self.volumen_disponible_ml = volumen_final_ml
+        self.estado = EstadoTintura.LISTA
+        self.fecha_estabilizacion_fin = datetime.now()
+
+    def to_dict(self) -> Dict:
+        """Exporta a diccionario para serialización JSON/YAML"""
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "grupo_funcional": (
+                self.grupo_funcional.value if self.grupo_funcional else None
+            ),
+            "version": self.version,
+            "composicion": [c.to_dict() for c in self.composicion],
+            "peso_materia_seca_g": self.peso_total_materia_seca_g,
+            "volumen_alcohol_ml": self.volumen_alcohol_ml,
+            "parametros": self.parametros.to_dict() if self.parametros else None,
+            "fecha_inicio": (
+                self.fecha_inicio.isoformat() if self.fecha_inicio else None
+            ),
+            "fecha_corte_estimada": (
+                self.fecha_corte_estimada.isoformat()
+                if self.fecha_corte_estimada
+                else None
+            ),
+            "fecha_corte_real": (
+                self.fecha_corte_real.isoformat() if self.fecha_corte_real else None
+            ),
+            "fecha_estabilizacion_fin": (
+                self.fecha_estabilizacion_fin.isoformat()
+                if self.fecha_estabilizacion_fin
+                else None
+            ),
+            "registros": [r.to_dict() for r in self.registros_extraccion],
+            "control_calidad": (
+                self.control_calidad.to_dict() if self.control_calidad else None
+            ),
+            "estado": self.estado.value,
+            "observaciones": self.observaciones_iniciales,
+            "volumen_disponible_ml": self.volumen_disponible_ml,
+            "ubicacion": self.ubicacion_almacen,
+            "tags": self.tags,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "Tintura":
+        """Crea una instancia desde diccionario"""
+        # Esta implementación requeriría mapeo más complejo
+        # Versión simplificada:
+        tintura = cls()
+        for key, value in data.items():
+            if hasattr(tintura, key):
+                setattr(tintura, key, value)
+        return tintura
+
+
+@dataclass
+class LoteTintura:
+    """Lote de producción de una tintura (para trazabilidad)"""
+
+    id: str = field(
+        default_factory=lambda: f"LT-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4]}"
+    )
+    tintura_id: str = ""
+    fecha_produccion: datetime = field(default_factory=datetime.now)
+    volumen_producido_ml: float = 0.0
+    proveedor_materia_prima: str = ""
+    certificado_calidad: Optional[str] = None  # Ruta a archivo
+    notas_produccion: str = ""

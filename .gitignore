@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+graphify-out/
+data/*.db
+data/*.db-journal
+data/*_backup_*.db
+.streamlit/

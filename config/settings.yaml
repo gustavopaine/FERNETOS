@@ -1,0 +1,19 @@
+system:
+  version: "1.0"
+  default_alcohol_base: 96.0  # ABV alcohol base
+  default_water_source: "osmotizada"
+
+parameters:
+  abv_ranges:
+    min_final: 38.0
+    max_final: 42.0
+  sugar_ranges:
+    min_gpl: 160
+    max_gpl: 220
+  ph_ranges:
+    min_final: 4.8
+    max_final: 5.6
+
+scaling:
+  base_batch_size: 10  # litros
+  pilot_batch_size: 0.5  # 500ml
