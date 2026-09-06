@@ -57,6 +57,23 @@ GRUPOS_POR_PRODUCTO: Dict[Producto, List[GrupoFuncional]] = {
 }
 
 
+def grupos_disponibles_para(producto_valor: Optional[str]) -> List[str]:
+    """
+    Valores de GrupoFuncional válidos para un producto, como strings listos
+    para un dropdown de UI. `None` o "Todos" devuelve la unión de todos los
+    productos, sin duplicar EXPERIMENTAL (compartido por ambos).
+
+    Único lugar donde se calcula esta lista, para que un filtro por
+    Producto que cambia las opciones de Grupo (Listado de Tinturas, Stock)
+    se comporte igual en todos lados.
+    """
+    if not producto_valor or producto_valor == "Todos":
+        grupos = [g for grupos in GRUPOS_POR_PRODUCTO.values() for g in grupos]
+    else:
+        grupos = GRUPOS_POR_PRODUCTO[Producto(producto_valor)]
+    return list(dict.fromkeys(g.value for g in grupos))
+
+
 class EstadoTintura(Enum):
     """Estados del ciclo de vida de una tintura"""
 

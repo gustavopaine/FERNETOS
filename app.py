@@ -296,7 +296,7 @@ elif menu == "🧪 Tinturas":
         st.subheader("Tinturas Registradas")
 
         # Filtros
-        from modules.tinturas.models import GRUPOS_POR_PRODUCTO, Producto
+        from modules.tinturas.models import Producto, grupos_disponibles_para
 
         col0, col1, col2, col3 = st.columns(4)
         with col0:
@@ -309,15 +309,12 @@ elif menu == "🧪 Tinturas":
                 ["Todos", "en_maceracion", "en_estabilizacion", "lista", "agotada"],
             )
         with col2:
-            grupos_disponibles = (
-                [g.value for grupos in GRUPOS_POR_PRODUCTO.values() for g in grupos]
-                if filtro_producto == "Todos"
-                else [g.value for g in GRUPOS_POR_PRODUCTO[Producto(filtro_producto)]]
-            )
-            # dict.fromkeys en vez de set(): preserva el orden y no repite
-            # EXPERIMENTAL cuando "Todos" junta los grupos de ambos productos
+            # Sin key= a propósito: al cambiar filtro_producto, Streamlit
+            # detecta que options cambió y regenera el widget con el valor
+            # por defecto ("Todos") en vez de arrastrar una selección que ya
+            # no es válida para el nuevo producto.
             filtro_grupo = st.selectbox(
-                "Grupo", ["Todos"] + list(dict.fromkeys(grupos_disponibles))
+                "Grupo", ["Todos"] + grupos_disponibles_para(filtro_producto)
             )
         with col3:
             busqueda = st.text_input("🔍 Buscar", placeholder="Nombre o ID")
@@ -1547,11 +1544,15 @@ elif menu == "🍷 Ensamblaje Gancia":
                     with st.container(border=True):
                         st.metric("ABV Calculado", f"{abv_calculado_gancia:.2f}%")
 
+                volumen_real_gancia_ml = GanciaCalculator.calcular_volumen_con_azucar(
+                    composicion_gancia.volumen_total_ml, composicion_gancia.azucar_g
+                )
+
                 with col_r2:
                     with st.container(border=True):
                         st.metric(
                             "Volumen total",
-                            f"{composicion_gancia.volumen_total_ml/1000:.2f}L",
+                            f"{volumen_real_gancia_ml/1000:.2f}L",
                         )
 
                 with col_r3:
@@ -2692,7 +2693,7 @@ elif menu == "📦 Stock":
         st.divider()
 
         # Filtros
-        from modules.tinturas.models import GRUPOS_POR_PRODUCTO, Producto
+        from modules.tinturas.models import Producto, grupos_disponibles_para
 
         col_f0, col_f1, col_f2, col_f3 = st.columns(4)
 
@@ -2711,15 +2712,14 @@ elif menu == "📦 Stock":
             )
 
         with col_f2:
-            grupos_stock_disponibles = (
-                [g.value for grupos in GRUPOS_POR_PRODUCTO.values() for g in grupos]
-                if filtro_producto_stock == "Todos"
-                else [g.value for g in GRUPOS_POR_PRODUCTO[Producto(filtro_producto_stock)]]
-            )
+            # Sin key= a propósito (ver el mismo filtro en Listado de
+            # Tinturas): con key fija, cambiar filtro_producto_stock dejaba
+            # seleccionado un grupo que ya no es válido para el nuevo
+            # producto (ej. "citricos" al pasar a Gancia) y el inventario
+            # mostraba "sin resultados" en vez de resetear a "Todos".
             filtro_grupo_stock = st.selectbox(
                 "Filtrar por grupo",
-                ["Todos"] + list(dict.fromkeys(grupos_stock_disponibles)),
-                key="stock_filtro_grupo",
+                ["Todos"] + grupos_disponibles_para(filtro_producto_stock),
             )
 
         with col_f3:

@@ -92,3 +92,10 @@ def test_calcular_abv_blend_volumen_cero_no_divide_por_cero(calc):
 @pytest.mark.parametrize("pct_wv,volumen_ml,esperado_g", [(10.0, 10000.0, 1000.0), (8.0, 5000.0, 400.0)])
 def test_calcular_azucar_porcentaje_peso_volumen(pct_wv, volumen_ml, esperado_g):
     assert GanciaCalculator.calcular_azucar(pct_wv, volumen_ml) == pytest.approx(esperado_g)
+
+
+def test_calcular_volumen_con_azucar_agrega_aporte_de_la_azucar():
+    # 10000ml sin azúcar + 1000g de azúcar seca * 0.6ml/g = 10600ml reales
+    assert GanciaCalculator.calcular_volumen_con_azucar(10000.0, 1000.0) == pytest.approx(
+        10600.0
+    )

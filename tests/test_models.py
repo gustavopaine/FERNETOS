@@ -13,6 +13,7 @@ from modules.tinturas.models import (
     ParametrosExtraccion,
     Producto,
     Tintura,
+    grupos_disponibles_para,
 )
 
 
@@ -83,3 +84,23 @@ def test_tintura_fernet_con_grupo_gancia_lanza():
 def test_tintura_to_dict_incluye_producto():
     t = Tintura(nombre="Quinado Base", producto=Producto.GANCIA)
     assert t.to_dict()["producto"] == "gancia"
+
+
+def test_grupos_disponibles_para_fernet():
+    grupos = grupos_disponibles_para("fernet")
+    assert "amargos_estructurales" in grupos
+    assert "quinados" not in grupos
+
+
+def test_grupos_disponibles_para_gancia():
+    grupos = grupos_disponibles_para("gancia")
+    assert "quinados" in grupos
+    assert "amargos_estructurales" not in grupos
+
+
+@pytest.mark.parametrize("valor", ["Todos", None])
+def test_grupos_disponibles_para_todos_o_none_incluye_ambos_sin_duplicar_experimental(valor):
+    grupos = grupos_disponibles_para(valor)
+    assert "amargos_estructurales" in grupos
+    assert "quinados" in grupos
+    assert grupos.count("experimental") == 1
