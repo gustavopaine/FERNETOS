@@ -124,11 +124,15 @@ pandas - Manejo de datos
 
 numpy - Cálculos numéricos
 
+matplotlib - Gráficos estáticos de curvas de extracción
+
 plotly - Gráficos interactivos
 
 scipy - Análisis de curvas
 
 pyyaml - Archivos de configuración
+
+reportlab - Generación de manuales en PDF
 
 Paso 5: Inicializar la base de datos
 bash
@@ -446,7 +450,7 @@ El grupo funcional de la tintura
 
 Regla general por grupo:
 
-Amargos: 16-18 días
+Amargos: 16-21 días
 
 Aromática alta: 5-7 días
 
