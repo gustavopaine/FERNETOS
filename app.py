@@ -169,7 +169,9 @@ with st.sidebar:
             "🧮 Ensamblaje",
             "🍷 Ensamblaje Gancia",
             "🎯 Micromezclas",
+            "🎯 Micromezclas Gancia",
             "⚖️ Pruebas A/B",
+            "⚖️ Pruebas A/B Gancia",
             "📦 Stock",
             "⚙️ Configuración",
         ],
@@ -1721,12 +1723,15 @@ elif menu == "🎯 Micromezclas":
                 azucar_objetivo_gpl=azucar_base,
             )
 
-            # Preparar tinturas seleccionadas
+            # Preparar tinturas seleccionadas (tintura1_id/ml1/etc. solo
+            # existen si tinturas_stock no estaba vacío - ver el selector
+            # más arriba)
             tinturas_dict = {}
-            if ml1 > 0 and tintura1_id:
-                tinturas_dict[tintura1_id] = float(ml1)
-            if ml2 > 0 and tintura2_id and tintura2_id != tintura1_id:
-                tinturas_dict[tintura2_id] = float(ml2)
+            if tinturas_stock:
+                if ml1 > 0 and tintura1_id:
+                    tinturas_dict[tintura1_id] = float(ml1)
+                if ml2 > 0 and tintura2_id and tintura2_id != tintura1_id:
+                    tinturas_dict[tintura2_id] = float(ml2)
 
             if not tinturas_dict:
                 st.error("Selecciona al menos una tintura")
@@ -1844,6 +1849,17 @@ elif menu == "🎯 Micromezclas":
                     nuevo_blend.composicion.tinturas[tintura_ajuste] += incremento
                 else:
                     nuevo_blend.composicion.tinturas[tintura_ajuste] = incremento
+
+                # Recalcular ABV: sin esto queda pegado al valor del blend
+                # base y no refleja el ajuste que se acaba de aplicar.
+                tinturas_data_ajuste = {}
+                for tid in nuevo_blend.composicion.tinturas.keys():
+                    t = repo.get_by_id(tid)
+                    if t:
+                        tinturas_data_ajuste[tid] = t
+                nuevo_blend.abv_calculado = calculator.calcular_abv_blend(
+                    nuevo_blend.composicion, tinturas_data_ajuste
+                )
 
                 # Actualizar versión
                 version_parts = nuevo_blend.version.split(".")
@@ -2051,6 +2067,539 @@ elif menu == "🎯 Micromezclas":
             st.session_state.micro_blend_actual = None
             if "eval_iter" in st.session_state:
                 del st.session_state["eval_iter"]
+            st.success("Microblending reseteado")
+            st.rerun()
+
+# =========================================================
+# MÓDULO DE MICROMEZCLAS GANCIA
+# =========================================================
+elif menu == "🎯 Micromezclas Gancia":
+    st.title("🎯 Micromezclas Gancia")
+    st.caption("Ajustes de precisión de 0.1ml para optimización fina - base vínica")
+
+    if not repo:
+        st.error("Error: Repositorio no disponible")
+        st.stop()
+
+    from modules.ensamblaje.calculator_gancia import (
+        ComposicionBlendGancia,
+        GanciaBlendParams,
+        GanciaBlendResult,
+        GanciaCalculator,
+    )
+    from modules.tinturas.models import Producto
+
+    gancia_calculator_micro = GanciaCalculator()
+
+    # Inicializar estado de sesión si no existe (namespace separado de Fernet)
+    if "micro_gancia_iteraciones" not in st.session_state:
+        st.session_state.micro_gancia_iteraciones = []
+        st.session_state.micro_gancia_blend_actual = None
+
+    tabs = st.tabs(["⚙️ Configuración", "📊 Iteraciones", "📈 Resultados"])
+
+    # =========================================================
+    # TAB 1: CONFIGURACIÓN INICIAL
+    # =========================================================
+    with tabs[0]:
+        st.subheader("Configuración del Lote Piloto")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            with st.container(border=True):
+                st.write("**📋 Parámetros del Blend Base**")
+
+                volumen_base_g = st.number_input(
+                    "Volumen objetivo (L)",
+                    min_value=1.0,
+                    max_value=20.0,
+                    value=10.0,
+                    step=1.0,
+                    key="micro_gancia_volumen",
+                )
+
+                abv_base_g = st.number_input(
+                    "ABV objetivo (%)",
+                    min_value=15.0,
+                    max_value=18.0,
+                    value=17.0,
+                    step=0.5,
+                    key="micro_gancia_abv",
+                )
+
+                vino_pct_base_g = st.slider(
+                    "% Vino sobre el volumen",
+                    min_value=75.0,
+                    max_value=80.0,
+                    value=78.0,
+                    step=0.5,
+                    key="micro_gancia_vino_pct",
+                )
+
+                azucar_pct_base_g = st.slider(
+                    "Azúcar (% p/v)",
+                    min_value=8.0,
+                    max_value=12.0,
+                    value=10.0,
+                    step=0.5,
+                    key="micro_gancia_azucar",
+                )
+
+        with col2:
+            with st.container(border=True):
+                st.write("**🧪 Tinturas de Gancia Disponibles**")
+
+                tinturas_stock_g = repo.listar(
+                    estado="lista", producto=Producto.GANCIA.value
+                )
+
+                if not tinturas_stock_g:
+                    st.warning(
+                        "No hay tinturas de Gancia disponibles en stock. Creá y "
+                        "finalizá tinturas de producto Gancia en 🧪 Tinturas."
+                    )
+                else:
+                    # Mostrar selector simple de tinturas
+                    opciones_tinturas_g = {}
+                    for t in tinturas_stock_g[:5]:  # Limitar a 5 para simplicidad
+                        opciones_tinturas_g[t.id] = (
+                            f"{t.nombre} ({t.volumen_disponible_ml} ml)"
+                        )
+
+                    tintura1_id_g = st.selectbox(
+                        "Tintura 1",
+                        options=list(opciones_tinturas_g.keys()),
+                        format_func=lambda x: opciones_tinturas_g[x],
+                        key="micro_gancia_t1",
+                    )
+
+                    ml1_g = st.number_input(
+                        "Volumen (ml)",
+                        min_value=0,
+                        max_value=500,
+                        value=50,
+                        step=10,
+                        key="micro_gancia_ml1",
+                    )
+
+                    tintura2_id_g = st.selectbox(
+                        "Tintura 2",
+                        options=list(opciones_tinturas_g.keys()),
+                        format_func=lambda x: opciones_tinturas_g[x],
+                        key="micro_gancia_t2",
+                    )
+
+                    ml2_g = st.number_input(
+                        "Volumen (ml)",
+                        min_value=0,
+                        max_value=500,
+                        value=30,
+                        step=10,
+                        key="micro_gancia_ml2",
+                    )
+
+        st.divider()
+
+        # Botón para iniciar
+        if st.button(
+            "🚀 Iniciar Microblending",
+            type="primary",
+            use_container_width=True,
+            key="micro_gancia_iniciar",
+        ):
+            params_g = GanciaBlendParams(
+                volumen_objetivo_litros=volumen_base_g,
+                abv_objetivo=abv_base_g,
+                vino_pct=vino_pct_base_g / 100,
+                azucar_pct_wv=azucar_pct_base_g,
+            )
+
+            # Preparar tinturas seleccionadas
+            tinturas_dict_g = {}
+            if tinturas_stock_g:
+                if ml1_g > 0 and tintura1_id_g:
+                    tinturas_dict_g[tintura1_id_g] = float(ml1_g)
+                if ml2_g > 0 and tintura2_id_g and tintura2_id_g != tintura1_id_g:
+                    tinturas_dict_g[tintura2_id_g] = float(ml2_g)
+
+            if not tinturas_dict_g:
+                st.error("Selecciona al menos una tintura")
+            else:
+                # Obtener datos de tinturas
+                tinturas_data_g = {}
+                for tid in tinturas_dict_g.keys():
+                    t = repo.get_by_id(tid)
+                    if t:
+                        tinturas_data_g[tid] = t
+
+                tinturas_ml_total_g = sum(tinturas_dict_g.values())
+                vino_ml_g, alcohol_fortificacion_ml_g, agua_ml_g = (
+                    gancia_calculator_micro.calcular_base_vino_alcohol(
+                        params_g, tinturas_ml_total_g
+                    )
+                )
+                azucar_g_g = GanciaCalculator.calcular_azucar(
+                    params_g.azucar_pct_wv, params_g.volumen_objetivo_ml
+                )
+
+                composicion_g = ComposicionBlendGancia(
+                    vino_ml=vino_ml_g,
+                    alcohol_fortificacion_ml=alcohol_fortificacion_ml_g,
+                    tinturas=tinturas_dict_g,
+                    agua_ml=agua_ml_g,
+                    azucar_g=azucar_g_g,
+                )
+
+                abv_calculado_g = GanciaCalculator.calcular_abv_blend(
+                    composicion_g,
+                    tinturas_data_g,
+                    vino_abv=params_g.vino_abv,
+                    alcohol_fortificacion_abv=params_g.alcohol_fortificacion_abv,
+                )
+
+                blend_result_g = GanciaBlendResult(
+                    params=params_g,
+                    composicion=composicion_g,
+                    abv_calculado=abv_calculado_g,
+                )
+
+                # Guardar en sesión
+                st.session_state.micro_gancia_blend_actual = blend_result_g
+                st.session_state.micro_gancia_iteraciones = [
+                    {
+                        "numero": 0,
+                        "blend": blend_result_g,
+                        "ajustes": [],
+                        "evaluacion": None,
+                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    }
+                ]
+
+                st.success(f"✅ Blend base creado: {blend_result_g.id}")
+                st.balloons()
+
+    # =========================================================
+    # TAB 2: ITERACIONES
+    # =========================================================
+    with tabs[1]:
+        if not st.session_state.micro_gancia_iteraciones:
+            st.info("👈 Configura un blend base en la pestaña 'Configuración'")
+            st.stop()
+
+        st.subheader("Iteraciones del Microblending")
+
+        # Mostrar blend actual
+        ultima_iter_g = st.session_state.micro_gancia_iteraciones[-1]
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            with st.container(border=True):
+                st.metric("Iteración actual", f"#{ultima_iter_g['numero']}")
+
+        with col2:
+            with st.container(border=True):
+                st.metric("ABV", f"{ultima_iter_g['blend'].abv_calculado:.2f}%")
+
+        with col3:
+            with st.container(border=True):
+                st.metric(
+                    "Total iteraciones",
+                    len(st.session_state.micro_gancia_iteraciones) - 1,
+                )
+
+        st.divider()
+
+        # Sección de ajustes
+        st.subheader("🔧 Nuevo Ajuste")
+
+        col_a1, col_a2, col_a3 = st.columns(3)
+
+        with col_a1:
+            # Tinturas disponibles en el blend actual
+            opciones_ajuste_g = {}
+            for tid in ultima_iter_g["blend"].composicion.tinturas.keys():
+                t = repo.get_by_id(tid)
+                if t:
+                    opciones_ajuste_g[tid] = t.nombre
+
+            if not opciones_ajuste_g:
+                st.info("Este blend no tiene tinturas para ajustar")
+                tintura_ajuste_g = None
+            else:
+                tintura_ajuste_g = st.selectbox(
+                    "Tintura a ajustar",
+                    options=list(opciones_ajuste_g.keys()),
+                    format_func=lambda x: opciones_ajuste_g[x],
+                    key="ajuste_gancia_tintura",
+                )
+
+        with col_a2:
+            incremento_g = st.number_input(
+                "Incremento (ml)",
+                min_value=-0.5,
+                max_value=0.5,
+                value=0.1,
+                step=0.1,
+                format="%.1f",
+                key="ajuste_gancia_inc",
+            )
+
+        with col_a3:
+            razon_g = st.selectbox(
+                "Razón",
+                ["ataque", "equilibrio", "amargor", "persistencia", "complejidad"],
+                key="ajuste_gancia_razon",
+            )
+
+        if st.button(
+            "✅ Aplicar Ajuste", use_container_width=True, key="ajuste_gancia_aplicar"
+        ):
+            if not tintura_ajuste_g:
+                st.error("No hay tinturas para ajustar en este blend")
+            else:
+                from copy import deepcopy
+
+                nuevo_blend_g = deepcopy(ultima_iter_g["blend"])
+
+                if tintura_ajuste_g in nuevo_blend_g.composicion.tinturas:
+                    nuevo_blend_g.composicion.tinturas[tintura_ajuste_g] += incremento_g
+                else:
+                    nuevo_blend_g.composicion.tinturas[tintura_ajuste_g] = incremento_g
+
+                # Recalcular ABV con los datos actuales de tinturas
+                tinturas_data_ajuste_g = {}
+                for tid in nuevo_blend_g.composicion.tinturas.keys():
+                    t = repo.get_by_id(tid)
+                    if t:
+                        tinturas_data_ajuste_g[tid] = t
+                nuevo_blend_g.abv_calculado = GanciaCalculator.calcular_abv_blend(
+                    nuevo_blend_g.composicion,
+                    tinturas_data_ajuste_g,
+                    vino_abv=nuevo_blend_g.params.vino_abv,
+                    alcohol_fortificacion_abv=nuevo_blend_g.params.alcohol_fortificacion_abv,
+                )
+
+                # Actualizar versión
+                version_parts_g = nuevo_blend_g.version.split(".")
+                nuevo_blend_g.version = (
+                    f"{version_parts_g[0]}.{version_parts_g[1]}."
+                    f"{int(version_parts_g[2]) + 1}"
+                )
+                nuevo_blend_g.id = (
+                    f"{nuevo_blend_g.id.split('-')[0]}-"
+                    f"IT{len(st.session_state.micro_gancia_iteraciones)}"
+                )
+
+                # Guardar iteración
+                st.session_state.micro_gancia_iteraciones.append(
+                    {
+                        "numero": len(st.session_state.micro_gancia_iteraciones),
+                        "blend": nuevo_blend_g,
+                        "ajustes": [
+                            {
+                                "tintura": tintura_ajuste_g,
+                                "incremento": incremento_g,
+                                "razon": razon_g,
+                            }
+                        ],
+                        "evaluacion": None,
+                        "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    }
+                )
+
+                st.success(
+                    f"✅ Iteración {len(st.session_state.micro_gancia_iteraciones)-1} creada"
+                )
+                st.rerun()
+
+        st.divider()
+
+        # Tabla de iteraciones
+        st.subheader("📋 Historial de Iteraciones")
+
+        data_iter_g = []
+        for i, it in enumerate(st.session_state.micro_gancia_iteraciones):
+            if i == 0:
+                continue  # Saltar iteración base
+
+            ajustes_str_g = ", ".join(
+                [f"{a['tintura'][-4:]}: {a['incremento']:+.1f}" for a in it["ajustes"]]
+            )
+
+            data_iter_g.append(
+                {
+                    "Iteración": it["numero"],
+                    "Ajustes": ajustes_str_g,
+                    "ABV": f"{it['blend'].abv_calculado:.2f}%",
+                    "Hora": it["timestamp"],
+                    "Evaluada": "✅" if it["evaluacion"] else "⏳",
+                }
+            )
+
+        if data_iter_g:
+            df_iter_g = pd.DataFrame(data_iter_g)
+            st.dataframe(df_iter_g, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay iteraciones aún. Aplica tu primer ajuste.")
+
+    # =========================================================
+    # TAB 3: RESULTADOS
+    # =========================================================
+    with tabs[2]:
+        if not st.session_state.micro_gancia_iteraciones:
+            st.info("👈 No hay datos de microblending")
+            st.stop()
+
+        st.subheader("Resultados del Microblending")
+
+        # Buscar la mejor iteración (la que tenga evaluación con mayor puntaje)
+        mejor_iter_g = None
+        mejor_puntaje_g = 0
+
+        for it in st.session_state.micro_gancia_iteraciones:
+            if it["evaluacion"] and it["evaluacion"].get("puntaje", 0) > mejor_puntaje_g:
+                mejor_puntaje_g = it["evaluacion"]["puntaje"]
+                mejor_iter_g = it
+
+        col_r1, col_r2, col_r3 = st.columns(3)
+
+        with col_r1:
+            with st.container(border=True):
+                st.metric(
+                    "Total iteraciones",
+                    len(st.session_state.micro_gancia_iteraciones) - 1,
+                )
+
+        with col_r2:
+            with st.container(border=True):
+                if mejor_iter_g:
+                    st.metric("Mejor iteración", f"#{mejor_iter_g['numero']}")
+                else:
+                    st.metric("Mejor iteración", "Sin evaluaciones")
+
+        with col_r3:
+            with st.container(border=True):
+                if mejor_iter_g:
+                    st.metric("Puntaje máximo", f"{mejor_puntaje_g:.1f}")
+                else:
+                    st.metric("Puntaje máximo", "N/A")
+
+        # Formulario para evaluar una iteración
+        st.divider()
+        st.subheader("📝 Evaluar Iteración")
+
+        col_e1, col_e2 = st.columns(2)
+
+        with col_e1:
+            iter_evaluar_g = st.selectbox(
+                "Seleccionar iteración",
+                options=[
+                    it["numero"]
+                    for it in st.session_state.micro_gancia_iteraciones
+                    if it["numero"] > 0
+                ],
+                key="eval_gancia_select",
+            )
+
+        with col_e2:
+            if st.button(
+                "➕ Cargar formulario",
+                use_container_width=True,
+                key="eval_gancia_cargar",
+            ):
+                st.session_state["eval_gancia_iter"] = iter_evaluar_g
+
+        if "eval_gancia_iter" in st.session_state:
+            iter_num_g = st.session_state["eval_gancia_iter"]
+            iter_data_g = next(
+                (
+                    it
+                    for it in st.session_state.micro_gancia_iteraciones
+                    if it["numero"] == iter_num_g
+                ),
+                None,
+            )
+
+            if iter_data_g:
+                with st.form(f"form_eval_gancia_{iter_num_g}", border=True):
+                    st.write(f"**Evaluando Iteración {iter_num_g}**")
+
+                    col_f1, col_f2 = st.columns(2)
+
+                    with col_f1:
+                        ataque_g = st.slider("Ataque (1-10)", 1, 10, 7)
+                        complejidad_g = st.slider("Complejidad (1-10)", 1, 10, 7)
+
+                    with col_f2:
+                        equilibrio_g = st.slider("Equilibrio (1-10)", 1, 10, 7)
+                        persistencia_g = st.slider("Persistencia (1-10)", 1, 10, 7)
+
+                    notas_g = st.text_area("Notas de cata")
+
+                    if st.form_submit_button("💾 Guardar Evaluación"):
+                        puntaje_g = (
+                            ataque_g + complejidad_g + equilibrio_g + persistencia_g
+                        ) / 4
+
+                        iter_data_g["evaluacion"] = {
+                            "ataque": ataque_g,
+                            "complejidad": complejidad_g,
+                            "equilibrio": equilibrio_g,
+                            "persistencia": persistencia_g,
+                            "puntaje": puntaje_g,
+                            "notas": notas_g,
+                        }
+
+                        st.success(f"✅ Evaluación guardada para iteración {iter_num_g}")
+                        del st.session_state["eval_gancia_iter"]
+                        time.sleep(1)
+                        st.rerun()
+
+        # Gráfico de evolución (si hay evaluaciones)
+        st.divider()
+
+        iter_con_eval_g = [
+            (it["numero"], it["evaluacion"]["puntaje"])
+            for it in st.session_state.micro_gancia_iteraciones
+            if it["evaluacion"]
+        ]
+
+        if iter_con_eval_g:
+            st.subheader("📈 Evolución del Puntaje")
+
+            nums_g, puntajes_g = zip(*iter_con_eval_g)
+
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=list(nums_g),
+                    y=list(puntajes_g),
+                    mode="lines+markers",
+                    name="Puntaje",
+                    line=dict(color="green", width=3),
+                    marker=dict(size=10),
+                )
+            )
+
+            fig.update_layout(
+                xaxis_title="Iteración", yaxis_title="Puntaje", height=400
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Botón para resetear
+        st.divider()
+        if st.button(
+            "🔄 Resetear Microblending",
+            use_container_width=True,
+            key="micro_gancia_resetear",
+        ):
+            st.session_state.micro_gancia_iteraciones = []
+            st.session_state.micro_gancia_blend_actual = None
+            if "eval_gancia_iter" in st.session_state:
+                del st.session_state["eval_gancia_iter"]
             st.success("Microblending reseteado")
             st.rerun()
 
@@ -2619,6 +3168,570 @@ elif menu == "⚖️ Pruebas A/B":
         # Opción para cargar prueba anterior
         if st.button("🔄 Cargar prueba seleccionada", use_container_width=True):
             # Esta funcionalidad requeriría un selector
+            st.info("Selecciona una prueba de la tabla para cargarla (doble clic)")
+
+# =========================================================
+# MÓDULO DE PRUEBAS A/B GANCIA
+# =========================================================
+elif menu == "⚖️ Pruebas A/B Gancia":
+    st.title("⚖️ Pruebas A/B y Análisis Competitivo - Gancia")
+    st.caption("Comparación ciega contra referencias de mercado")
+
+    if not repo:
+        st.error("Error: Repositorio no disponible")
+        st.stop()
+
+    # Inicializar estado de sesión (namespace separado de Fernet)
+    if "pruebas_ab_gancia" not in st.session_state:
+        st.session_state.pruebas_ab_gancia = []
+    if "prueba_actual_gancia" not in st.session_state:
+        st.session_state.prueba_actual_gancia = None
+
+    tabs = st.tabs(
+        ["🎯 Nueva Prueba", "📊 Resultados", "📈 Análisis Competitivo", "📋 Historial"]
+    )
+
+    # =========================================================
+    # TAB 1: NUEVA PRUEBA
+    # =========================================================
+    with tabs[0]:
+        st.subheader("Configurar Nueva Prueba A/B")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            with st.container(border=True):
+                st.write("**🧪 Nuestra Fórmula**")
+
+                opciones_blends_g = {}
+
+                if (
+                    "micro_gancia_iteraciones" in st.session_state
+                    and st.session_state.micro_gancia_iteraciones
+                ):
+                    for it in st.session_state.micro_gancia_iteraciones:
+                        if it["numero"] > 0 and it.get("blend"):
+                            blend = it["blend"]
+                            opciones_blends_g[f"BLEND-{it['numero']}"] = (
+                                f"Iteración {it['numero']} (ABV: {blend.abv_calculado:.1f}%)"
+                            )
+
+                opciones_blends_g["custom"] = "✏️ Blend personalizado"
+
+                blend_seleccionado_g = st.selectbox(
+                    "Seleccionar blend",
+                    options=list(opciones_blends_g.keys()),
+                    format_func=lambda x: opciones_blends_g[x],
+                    key="ab_gancia_blend",
+                )
+
+                if blend_seleccionado_g == "custom":
+                    st.text_input(
+                        "Nombre del blend",
+                        value="Mi Blend Experimental",
+                        key="ab_gancia_nombre_custom",
+                    )
+
+                    col_c1, col_c2 = st.columns(2)
+                    with col_c1:
+                        st.number_input(
+                            "ABV (%)", value=17.0, step=0.5, key="ab_gancia_abv_custom"
+                        )
+                    with col_c2:
+                        st.number_input(
+                            "Azúcar (% p/v)",
+                            value=10.0,
+                            step=0.5,
+                            key="ab_gancia_azucar_custom",
+                        )
+
+        with col2:
+            with st.container(border=True):
+                st.write("**🥇 Referencia de Mercado**")
+
+                referencias_gancia = {
+                    "gancia_clasico": "Gancia Clásico",
+                    "cinzano": "Cinzano",
+                    "martini": "Martini",
+                    "otra": "Otra referencia",
+                }
+
+                ref_seleccionada_g = st.selectbox(
+                    "Seleccionar referencia",
+                    options=list(referencias_gancia.keys()),
+                    format_func=lambda x: referencias_gancia[x],
+                    key="ab_gancia_referencia",
+                )
+
+                if ref_seleccionada_g == "otra":
+                    st.text_input(
+                        "Nombre de la referencia", key="ab_gancia_ref_otra"
+                    )
+
+        st.divider()
+
+        # Configuración de la prueba
+        st.subheader("⚙️ Configuración de la Prueba")
+
+        col_p1, col_p2, col_p3 = st.columns(3)
+
+        with col_p1:
+            tipo_prueba_g = st.radio(
+                "Tipo de prueba",
+                ["A/B Simple", "Triangular (2 iguales, 1 diferente)"],
+                key="ab_gancia_tipo",
+            )
+
+        with col_p2:
+            num_catadores_g = st.number_input(
+                "Número de catadores",
+                min_value=1,
+                max_value=20,
+                value=3,
+                key="ab_gancia_catadores",
+            )
+
+        with col_p3:
+            ciego_g = st.checkbox("Prueba a ciegas", value=True, key="ab_gancia_ciego")
+
+        st.divider()
+
+        # Atributos a evaluar
+        st.subheader("📊 Atributos a Evaluar")
+
+        col_a1, col_a2, col_a3 = st.columns(3)
+
+        with col_a1:
+            eval_ataque_g = st.checkbox("Ataque", value=True, key="ab_gancia_ataque")
+            eval_complejidad_g = st.checkbox(
+                "Complejidad", value=True, key="ab_gancia_complejidad"
+            )
+
+        with col_a2:
+            eval_equilibrio_g = st.checkbox(
+                "Equilibrio", value=True, key="ab_gancia_equilibrio"
+            )
+            eval_persistencia_g = st.checkbox(
+                "Persistencia", value=True, key="ab_gancia_persistencia"
+            )
+
+        with col_a3:
+            eval_amargor_g = st.checkbox("Amargor", value=True, key="ab_gancia_amargor")
+            eval_aroma_g = st.checkbox("Aroma", value=False, key="ab_gancia_aroma")
+
+        # Botón para iniciar prueba
+        if st.button(
+            "🚀 Iniciar Prueba",
+            type="primary",
+            use_container_width=True,
+            key="ab_gancia_iniciar",
+        ):
+            import uuid
+            import random
+
+            prueba_id_g = f"ABG-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
+
+            codigos_g = [
+                f"M{random.randint(100, 999)}"
+                for _ in range(
+                    3 if tipo_prueba_g == "Triangular (2 iguales, 1 diferente)" else 2
+                )
+            ]
+
+            nueva_prueba_g = {
+                "id": prueba_id_g,
+                "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                "tipo": tipo_prueba_g,
+                "ciego": ciego_g,
+                "num_catadores": num_catadores_g,
+                "atributos": {
+                    "ataque": eval_ataque_g,
+                    "complejidad": eval_complejidad_g,
+                    "equilibrio": eval_equilibrio_g,
+                    "persistencia": eval_persistencia_g,
+                    "amargor": eval_amargor_g,
+                    "aroma": eval_aroma_g,
+                },
+                "blend": blend_seleccionado_g,
+                "referencia": ref_seleccionada_g,
+                "codigos": codigos_g,
+                "resultados": [],
+                "completada": False,
+            }
+
+            st.session_state.prueba_actual_gancia = nueva_prueba_g
+            st.session_state.pruebas_ab_gancia.append(nueva_prueba_g)
+
+            st.success(f"✅ Prueba creada: {prueba_id_g}")
+            st.balloons()
+
+    # =========================================================
+    # TAB 2: RESULTADOS
+    # =========================================================
+    with tabs[1]:
+        if not st.session_state.prueba_actual_gancia:
+            st.info("👈 Crea una prueba primero en la pestaña 'Nueva Prueba'")
+            st.stop()
+
+        prueba_g = st.session_state.prueba_actual_gancia
+
+        st.subheader(f"Prueba: {prueba_g['id']}")
+
+        col_r1, col_r2 = st.columns(2)
+
+        with col_r1:
+            with st.container(border=True):
+                st.write(f"**Tipo:** {prueba_g['tipo']}")
+                st.write(f"**Fecha:** {prueba_g['fecha']}")
+                st.write(f"**Catadores:** {prueba_g['num_catadores']}")
+
+        with col_r2:
+            with st.container(border=True):
+                st.write(f"**Códigos de muestra:**")
+                for codigo in prueba_g["codigos"]:
+                    st.write(f"  • {codigo}")
+
+        st.divider()
+
+        st.subheader("📝 Ingresar Resultados")
+
+        if prueba_g["ciego"]:
+            st.info("🔍 Prueba a ciegas - los códigos están aleatorizados")
+
+            col_cod1, col_cod2 = st.columns(2)
+
+            with col_cod1:
+                st.write("**Muestras disponibles:**")
+                for codigo in prueba_g["codigos"]:
+                    st.write(f"• {codigo}")
+
+            with col_cod2:
+                st.write("**Instrucciones:**")
+                st.write("1. Prueba las muestras en orden aleatorio")
+                st.write("2. Identifica cuál prefieres")
+                st.write("3. Registra los puntajes por atributo")
+        else:
+            st.info("🔓 Prueba abierta - las muestras están identificadas")
+
+        with st.form("form_resultados_gancia", border=True):
+            st.write("**Registrar evaluación de catador**")
+
+            col_f1, col_f2 = st.columns(2)
+
+            with col_f1:
+                catador_nombre_g = st.text_input(
+                    "Nombre del catador",
+                    value=f"Catador {len(prueba_g['resultados'])+1}",
+                )
+
+                if prueba_g["tipo"] == "A/B Simple":
+                    preferencia_g = st.radio(
+                        "¿Cuál prefieres?",
+                        options=[
+                            prueba_g["codigos"][0],
+                            prueba_g["codigos"][1],
+                            "Empate",
+                        ],
+                        horizontal=True,
+                    )
+                else:  # Triangular
+                    codigo_diferente_g = st.selectbox(
+                        "¿Cuál es la muestra diferente?", options=prueba_g["codigos"]
+                    )
+
+            with col_f2:
+                st.write("**Puntajes (1-10):**")
+
+                puntajes_g = {}
+                cols_p = st.columns(2)
+
+                with cols_p[0]:
+                    if prueba_g["atributos"]["ataque"]:
+                        puntajes_g["ataque"] = st.slider(
+                            "Ataque", 1, 10, 7, key="p_gancia_ataque"
+                        )
+                    if prueba_g["atributos"]["complejidad"]:
+                        puntajes_g["complejidad"] = st.slider(
+                            "Complejidad", 1, 10, 7, key="p_gancia_complejidad"
+                        )
+                    if prueba_g["atributos"]["equilibrio"]:
+                        puntajes_g["equilibrio"] = st.slider(
+                            "Equilibrio", 1, 10, 7, key="p_gancia_equilibrio"
+                        )
+
+                with cols_p[1]:
+                    if prueba_g["atributos"]["persistencia"]:
+                        puntajes_g["persistencia"] = st.slider(
+                            "Persistencia", 1, 10, 7, key="p_gancia_persistencia"
+                        )
+                    if prueba_g["atributos"]["amargor"]:
+                        puntajes_g["amargor"] = st.slider(
+                            "Amargor", 1, 10, 7, key="p_gancia_amargor"
+                        )
+                    if prueba_g["atributos"]["aroma"]:
+                        puntajes_g["aroma"] = st.slider(
+                            "Aroma", 1, 10, 7, key="p_gancia_aroma"
+                        )
+
+            comentarios_g = st.text_area("Comentarios del catador")
+
+            submitted_g = st.form_submit_button("💾 Guardar Evaluación")
+
+            if submitted_g:
+                resultado_g = {
+                    "catador": catador_nombre_g,
+                    "fecha": datetime.now().strftime("%H:%M:%S"),
+                    "puntajes": puntajes_g,
+                    "comentarios": comentarios_g,
+                }
+
+                if prueba_g["tipo"] == "A/B Simple":
+                    resultado_g["preferencia"] = preferencia_g
+                else:
+                    resultado_g["codigo_diferente"] = codigo_diferente_g
+
+                prueba_g["resultados"].append(resultado_g)
+                st.success(f"✅ Evaluación de {catador_nombre_g} guardada")
+                st.rerun()
+
+        if prueba_g["resultados"]:
+            st.divider()
+            st.subheader("📋 Resultados Ingresados")
+
+            data_res_g = []
+            for r in prueba_g["resultados"]:
+                if prueba_g["tipo"] == "A/B Simple":
+                    resumen_g = f"Prefiere: {r['preferencia']}"
+                else:
+                    resumen_g = f"Diferente: {r['codigo_diferente']}"
+
+                data_res_g.append(
+                    {
+                        "Catador": r["catador"],
+                        "Resultado": resumen_g,
+                        "Puntaje prom": f"{sum(r['puntajes'].values())/len(r['puntajes']):.1f}",
+                        "Hora": r["fecha"],
+                    }
+                )
+
+            df_res_g = pd.DataFrame(data_res_g)
+            st.dataframe(df_res_g, use_container_width=True, hide_index=True)
+
+            if (
+                len(prueba_g["resultados"]) >= prueba_g["num_catadores"]
+                and not prueba_g["completada"]
+            ):
+                if st.button(
+                    "✅ Finalizar Prueba",
+                    type="primary",
+                    use_container_width=True,
+                    key="ab_gancia_finalizar",
+                ):
+                    prueba_g["completada"] = True
+                    st.success(
+                        "Prueba finalizada. Ve a la pestaña 'Análisis Competitivo' para ver resultados."
+                    )
+                    st.rerun()
+
+    # =========================================================
+    # TAB 3: ANÁLISIS COMPETITIVO
+    # =========================================================
+    with tabs[2]:
+        if not st.session_state.pruebas_ab_gancia:
+            st.info("No hay pruebas realizadas")
+            st.stop()
+
+        pruebas_completadas_g = [
+            p for p in st.session_state.pruebas_ab_gancia if p.get("completada", False)
+        ]
+
+        if not pruebas_completadas_g:
+            st.warning("No hay pruebas completadas. Finaliza una prueba primero.")
+            st.stop()
+
+        prueba_analizar_g = st.selectbox(
+            "Seleccionar prueba para analizar",
+            options=[p["id"] for p in pruebas_completadas_g],
+            format_func=lambda x: f"{x} - {next((p['fecha'] for p in pruebas_completadas_g if p['id']==x), '')}",
+            key="analisis_gancia_select",
+        )
+
+        prueba_g = next(
+            (p for p in pruebas_completadas_g if p["id"] == prueba_analizar_g), None
+        )
+
+        if prueba_g:
+            st.subheader(f"Análisis de {prueba_g['id']}")
+
+            col_a1, col_a2 = st.columns(2)
+
+            with col_a1:
+                with st.container(border=True):
+                    st.write("**📊 Estadísticas Generales**")
+                    st.write(f"Total catadores: {len(prueba_g['resultados'])}")
+
+                    if prueba_g["tipo"] == "A/B Simple":
+                        preferencias_g = {}
+                        for r in prueba_g["resultados"]:
+                            pref = r["preferencia"]
+                            preferencias_g[pref] = preferencias_g.get(pref, 0) + 1
+
+                        for pref, count in preferencias_g.items():
+                            st.metric(
+                                f"Prefiere {pref}",
+                                f"{count} ({count/len(prueba_g['resultados'])*100:.0f}%)",
+                            )
+
+            with col_a2:
+                with st.container(border=True):
+                    st.write("**📈 Puntajes Promedio**")
+
+                    atributos_prom_g = {}
+                    for r in prueba_g["resultados"]:
+                        for attr, val in r["puntajes"].items():
+                            if attr not in atributos_prom_g:
+                                atributos_prom_g[attr] = []
+                            atributos_prom_g[attr].append(val)
+
+                    for attr, vals in atributos_prom_g.items():
+                        prom = sum(vals) / len(vals)
+                        st.metric(attr.capitalize(), f"{prom:.1f}/10")
+
+            st.divider()
+
+            st.subheader("🕸️ Perfil Sensorial Promedio")
+
+            if atributos_prom_g:
+                categorias_g = list(atributos_prom_g.keys())
+                valores_g = [sum(vals) / len(vals) for vals in atributos_prom_g.values()]
+
+                valores_ref_g = [7.5, 8.0, 7.8, 8.2, 7.5][: len(categorias_g)]
+
+                fig = go.Figure()
+
+                fig.add_trace(
+                    go.Scatterpolar(
+                        r=valores_g,
+                        theta=categorias_g,
+                        fill="toself",
+                        name="Nuestra Fórmula",
+                        line_color="blue",
+                    )
+                )
+
+                fig.add_trace(
+                    go.Scatterpolar(
+                        r=valores_ref_g,
+                        theta=categorias_g,
+                        fill="toself",
+                        name=referencias_gancia.get(
+                            prueba_g["referencia"], prueba_g["referencia"]
+                        ),
+                        line_color="red",
+                    )
+                )
+
+                fig.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
+                    showlegend=True,
+                    height=500,
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.divider()
+            st.subheader("📊 Significancia Estadística")
+
+            if prueba_g["tipo"] == "Triangular (2 iguales, 1 diferente)":
+                aciertos_g = 0
+                for r in prueba_g["resultados"]:
+                    if r.get("codigo_diferente") == prueba_g["codigos"][0]:
+                        aciertos_g += 1
+
+                total_g = len(prueba_g["resultados"])
+                tasa_aciertos_g = aciertos_g / total_g if total_g > 0 else 0
+
+                st.metric("Tasa de aciertos", f"{tasa_aciertos_g:.1%}")
+
+                if tasa_aciertos_g > 0.5:
+                    st.success(
+                        "✅ Los catadores pueden distinguir nuestra fórmula significativamente"
+                    )
+                else:
+                    st.warning("⚠️ No hay diferencia significativa detectable")
+
+            else:  # A/B Simple
+                pref_nuestra_g = sum(
+                    1
+                    for r in prueba_g["resultados"]
+                    if r["preferencia"] == prueba_g["codigos"][0]
+                )
+                pref_ref_g = sum(
+                    1
+                    for r in prueba_g["resultados"]
+                    if r["preferencia"] == prueba_g["codigos"][1]
+                )
+                empates_g = sum(
+                    1 for r in prueba_g["resultados"] if r["preferencia"] == "Empate"
+                )
+
+                total_g = len(prueba_g["resultados"])
+
+                col_s1, col_s2, col_s3 = st.columns(3)
+
+                with col_s1:
+                    st.metric(
+                        "Prefieren nuestra",
+                        f"{pref_nuestra_g} ({pref_nuestra_g/total_g*100:.0f}%)",
+                    )
+                with col_s2:
+                    st.metric(
+                        "Prefieren referencia",
+                        f"{pref_ref_g} ({pref_ref_g/total_g*100:.0f}%)",
+                    )
+                with col_s3:
+                    st.metric("Empates", f"{empates_g} ({empates_g/total_g*100:.0f}%)")
+
+                if pref_nuestra_g > pref_ref_g:
+                    st.success("✅ Nuestra fórmula es preferida sobre la referencia")
+                elif pref_ref_g > pref_nuestra_g:
+                    st.warning("⚠️ La referencia es preferida sobre nuestra fórmula")
+                else:
+                    st.info("📊 Empate técnico")
+
+    # =========================================================
+    # TAB 4: HISTORIAL
+    # =========================================================
+    with tabs[3]:
+        st.subheader("📋 Historial de Pruebas")
+
+        if not st.session_state.pruebas_ab_gancia:
+            st.info("No hay pruebas registradas")
+            st.stop()
+
+        data_historial_g = []
+        for p in st.session_state.pruebas_ab_gancia:
+            data_historial_g.append(
+                {
+                    "ID": p["id"],
+                    "Fecha": p["fecha"],
+                    "Tipo": p["tipo"],
+                    "Catadores": f"{len(p['resultados'])}/{p['num_catadores']}",
+                    "Estado": "✅ Completada" if p.get("completada") else "⏳ En curso",
+                    "Referencia": referencias_gancia.get(
+                        p["referencia"], p["referencia"]
+                    ),
+                }
+            )
+
+        df_historial_g = pd.DataFrame(data_historial_g)
+        st.dataframe(df_historial_g, use_container_width=True, hide_index=True)
+
+        if st.button(
+            "🔄 Cargar prueba seleccionada",
+            use_container_width=True,
+            key="ab_gancia_cargar_hist",
+        ):
             st.info("Selecciona una prueba de la tabla para cargarla (doble clic)")
 
 # =========================================================
