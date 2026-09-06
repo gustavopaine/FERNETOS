@@ -121,3 +121,48 @@ def test_tintura_gancia_con_grupo_citricos_amargos_no_lanza():
         producto=Producto.GANCIA,
         grupo_funcional=GrupoFuncional.CITRICOS_AMARGOS,
     )
+
+
+def test_producto_campari_existe():
+    assert Producto.CAMPARI.value == "campari"
+
+
+def test_grupos_campari_incluye_los_nuevos_y_los_compartidos():
+    grupos_campari = GRUPOS_POR_PRODUCTO[Producto.CAMPARI]
+    assert GrupoFuncional.AMARGOS_ESTRUCTURALES in grupos_campari  # compartido con Fernet
+    assert GrupoFuncional.CITRICOS_AMARGOS in grupos_campari  # compartido con Gancia
+    assert GrupoFuncional.RAICES_AROMATICAS in grupos_campari
+    assert GrupoFuncional.AMADERADOS in grupos_campari
+    assert GrupoFuncional.COLORANTES_NATURALES in grupos_campari
+
+
+def test_amargos_estructurales_es_compartido_entre_fernet_y_campari():
+    assert GrupoFuncional.AMARGOS_ESTRUCTURALES in GRUPOS_POR_PRODUCTO[Producto.FERNET]
+    assert GrupoFuncional.AMARGOS_ESTRUCTURALES in GRUPOS_POR_PRODUCTO[Producto.CAMPARI]
+
+
+def test_citricos_amargos_es_compartido_entre_gancia_y_campari():
+    assert GrupoFuncional.CITRICOS_AMARGOS in GRUPOS_POR_PRODUCTO[Producto.GANCIA]
+    assert GrupoFuncional.CITRICOS_AMARGOS in GRUPOS_POR_PRODUCTO[Producto.CAMPARI]
+
+
+def test_tintura_campari_con_grupo_amargos_estructurales_no_lanza():
+    Tintura(
+        nombre="Amargos base Campari",
+        producto=Producto.CAMPARI,
+        grupo_funcional=GrupoFuncional.AMARGOS_ESTRUCTURALES,
+    )
+
+
+def test_tintura_campari_con_grupo_amaderados_no_lanza():
+    Tintura(
+        nombre="Chips de roble",
+        producto=Producto.CAMPARI,
+        grupo_funcional=GrupoFuncional.AMADERADOS,
+    )
+
+
+def test_grupos_disponibles_para_campari_no_incluye_grupos_de_fernet_exclusivos():
+    grupos = grupos_disponibles_para("campari")
+    assert "amargos_estructurales" in grupos  # compartido, sí aplica
+    assert "aromatica_alta" not in grupos  # exclusivo de fernet, no aplica

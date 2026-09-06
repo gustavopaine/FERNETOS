@@ -16,13 +16,14 @@ class Producto(Enum):
 
     FERNET = "fernet"
     GANCIA = "gancia"
+    CAMPARI = "campari"
 
 
 class GrupoFuncional(Enum):
     """Grupos funcionales de tinturas según su rol en el producto"""
 
     # Fernet
-    AMARGOS_ESTRUCTURALES = "amargos_estructurales"
+    AMARGOS_ESTRUCTURALES = "amargos_estructurales"  # compartido con Campari
     AROMATICA_ALTA = "aromatica_alta"
     ESPECIAS_CALIDAS = "especias_calidas"
     CITRICOS = "citricos"
@@ -31,8 +32,13 @@ class GrupoFuncional(Enum):
     # Gancia
     QUINADOS = "quinados"  # Quina/genciana - sin receta propia todavía, definido para uso futuro
     BOTANICOS_AROMATICOS = "botanicos_aromaticos"  # ej. romero
-    CITRICOS_AMARGOS = "citricos_amargos"  # cáscaras: pomelo, limón, naranja - aportan amargor
+    CITRICOS_AMARGOS = "citricos_amargos"  # cáscaras: pomelo, limón, naranja - aportan amargor, compartido con Campari
     ESPECIADO_SUAVE = "especiado_suave"  # ej. clavo de olor
+
+    # Campari
+    RAICES_AROMATICAS = "raices_aromaticas"  # ej. raíz de angélica
+    AMADERADOS = "amaderados"  # ej. chips de roble
+    COLORANTES_NATURALES = "colorantes_naturales"  # ej. flor de hibisco
 
     # Compartido
     EXPERIMENTAL = "experimental"
@@ -52,6 +58,14 @@ GRUPOS_POR_PRODUCTO: Dict[Producto, List[GrupoFuncional]] = {
         GrupoFuncional.BOTANICOS_AROMATICOS,
         GrupoFuncional.CITRICOS_AMARGOS,
         GrupoFuncional.ESPECIADO_SUAVE,
+        GrupoFuncional.EXPERIMENTAL,
+    ],
+    Producto.CAMPARI: [
+        GrupoFuncional.AMARGOS_ESTRUCTURALES,  # ajenjo, quina, genciana, ruibarbo
+        GrupoFuncional.RAICES_AROMATICAS,  # raíz de angélica
+        GrupoFuncional.AMADERADOS,  # chips de roble
+        GrupoFuncional.COLORANTES_NATURALES,  # flor de hibisco
+        GrupoFuncional.CITRICOS_AMARGOS,  # naranja, pomelo, limón
         GrupoFuncional.EXPERIMENTAL,
     ],
 }
