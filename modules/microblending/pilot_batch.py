@@ -48,7 +48,7 @@ class IteracionPiloto:
     """Una iteración completa del proceso de microblending"""
 
     numero: int
-    blend: BlendResult
+    blend: Any  # BlendResult de Fernet u otro producto (GanciaBlendResult, etc.)
     ajustes: List[MicroAjuste] = field(default_factory=list)
     evaluacion: Optional["EvaluacionSensorial"] = None
     timestamp: datetime = field(default_factory=datetime.now)
@@ -70,25 +70,33 @@ class PilotBatch:
     def __init__(
         self,
         nombre: str,
-        blend_base: BlendResult,
+        blend_base: Any,
         tinturas_data: Dict[str, Tintura],
         volumen_piloto_ml: float = 500.0,
+        calculator: Optional[Any] = None,
     ):
         """
         Inicializa un lote piloto.
 
         Args:
             nombre: Nombre identificativo del piloto
-            blend_base: Blend base a escalar
+            blend_base: Blend base a escalar (cualquier objeto con
+                .params.volumen_objetivo_litros y .composicion - no tiene
+                que ser específicamente BlendResult de Fernet)
             tinturas_data: Datos de tinturas disponibles
             volumen_piloto_ml: Volumen del lote piloto (default: 500ml)
+            calculator: Calculador a usar para escalar el blend base (debe
+                exponer .escalar_blend(blend_result, nuevo_volumen_litros)).
+                Por defecto FernetCalculator, para no romper el uso
+                existente - se puede inyectar GanciaCalculator u otro para
+                reutilizar este mismo pipeline con otros productos.
         """
         self.nombre = nombre
         self.id = f"PB-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4]}"
         self.blend_base = blend_base
         self.tinturas_data = tinturas_data
         self.volumen_piloto_ml = volumen_piloto_ml
-        self.calculator = FernetCalculator(tinturas_repo=None)  # Simplificado
+        self.calculator = calculator or FernetCalculator(tinturas_repo=None)
 
         self.iteraciones: List[IteracionPiloto] = []
         self.ajustes_acumulados: Dict[str, float] = {}  # tintura_id: ml total ajustado
@@ -108,7 +116,7 @@ class PilotBatch:
 
         self.iteraciones.append(iteracion)
 
-    def crear_lote_piloto_desde_base(self) -> BlendResult:
+    def crear_lote_piloto_desde_base(self) -> Any:
         """Retorna el blend escalado a volumen piloto (iteración actual)"""
         return self.iteraciones[-1].blend
 
@@ -118,7 +126,7 @@ class PilotBatch:
         incremento_ml: float,
         razon: str = "",
         observacion: str = "",
-    ) -> BlendResult:
+    ) -> Any:
         """
         Aplica un microajuste a la última iteración y crea una nueva.
 
@@ -174,7 +182,7 @@ class PilotBatch:
 
     def aplicar_ajustes_multiples(
         self, ajustes: List[Tuple[str, float]], razon: str = "ajuste_multiples"
-    ) -> BlendResult:
+    ) -> Any:
         """
         Aplica múltiples ajustes en una sola iteración.
 

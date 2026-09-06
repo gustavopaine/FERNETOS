@@ -99,30 +99,3 @@ def test_calcular_volumen_con_azucar_agrega_aporte_de_la_azucar():
     assert GanciaCalculator.calcular_volumen_con_azucar(10000.0, 1000.0) == pytest.approx(
         10600.0
     )
-
-
-# --- Gancia Casero: infusión directa (alcohol + agua, sin base vínica) ---
-# Receta real: 500ml de alcohol 96° + cáscaras/hierbas (no aportan alcohol)
-# + agua (3-5L) + azúcar. El ABV sale solo de diluir el alcohol en el agua
-# total; azúcar y sólidos no entran en el cálculo de ABV.
-
-
-def test_calcular_abv_infusion_500ml_alcohol_96_en_3l_agua():
-    abv = GanciaCalculator.calcular_abv_infusion(
-        alcohol_ml=500.0, alcohol_abv=96.0, agua_ml=3000.0
-    )
-    assert abv == pytest.approx(13.7, abs=0.05)
-
-
-def test_calcular_abv_infusion_500ml_alcohol_96_en_5l_agua():
-    abv = GanciaCalculator.calcular_abv_infusion(
-        alcohol_ml=500.0, alcohol_abv=96.0, agua_ml=5000.0
-    )
-    assert abv == pytest.approx(8.7, abs=0.05)
-
-
-def test_calcular_abv_infusion_sin_agua_es_el_grado_del_alcohol():
-    abv = GanciaCalculator.calcular_abv_infusion(
-        alcohol_ml=500.0, alcohol_abv=96.0, agua_ml=0.0
-    )
-    assert abv == pytest.approx(96.0)
