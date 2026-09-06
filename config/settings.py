@@ -5,8 +5,12 @@ Carga parámetros desde archivo YAML con defaults.
 
 import os
 import yaml
+from datetime import datetime
 from typing import Dict, Any, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
+
+BACKUP_TIMESTAMP_FORMAT = "%d/%m/%Y %H:%M"
+FRECUENCIA_A_DIAS = {"diario": 1, "semanal": 7, "mensual": 30}
 
 
 @dataclass
@@ -20,27 +24,17 @@ class SystemSettings:
 
 @dataclass
 class ParameterRanges:
-    """Rangos de parámetros técnicos"""
+    """Rangos de parámetros técnicos por defecto para nuevos blends"""
 
-    abv_ranges: Dict = field(
-        default_factory=lambda: {
-            "min_final": 38.0,
-            "max_final": 42.0,
-            "min_tintura": 40.0,
-            "max_tintura": 75.0,
-        }
-    )
-    sugar_ranges: Dict = field(
-        default_factory=lambda: {"min_gpl": 160, "max_gpl": 220, "default": 195}
-    )
-    ph_ranges: Dict = field(
-        default_factory=lambda: {
-            "min_final": 4.8,
-            "max_final": 5.6,
-            "min_tintura": 4.5,
-            "max_tintura": 6.0,
-        }
-    )
+    abv_min: float = 38.0
+    abv_max: float = 42.0
+    abv_default: float = 40.0
+    azucar_min: int = 160
+    azucar_max: int = 220
+    azucar_default: int = 195
+    ph_min: float = 4.8
+    ph_max: float = 5.6
+    ph_default: float = 5.2
 
 
 @dataclass
@@ -77,6 +71,15 @@ class SensorySettings:
 
 
 @dataclass
+class BackupSettings:
+    """Configuración de backup de la base de datos"""
+
+    auto_backup: bool = True
+    frecuencia: str = "semanal"  # "diario", "semanal", "mensual"
+    ultimo_backup: Optional[str] = None  # "%d/%m/%Y %H:%M"
+
+
+@dataclass
 class FernetOSConfig:
     """Configuración completa del sistema"""
 
@@ -85,6 +88,7 @@ class FernetOSConfig:
     scaling: ScalingSettings = field(default_factory=ScalingSettings)
     curves: CurveSettings = field(default_factory=CurveSettings)
     sensory: SensorySettings = field(default_factory=SensorySettings)
+    backup: BackupSettings = field(default_factory=BackupSettings)
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config/settings.yaml") -> "FernetOSConfig":
@@ -96,14 +100,18 @@ class FernetOSConfig:
                 with open(yaml_path, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f)
 
-                # Mapear datos cargados a la estructura
+                # Mapear cada sección presente en el YAML a su dataclass
+                # correspondiente (system, parameters, scaling, curves,
+                # sensory, backup comparten esta misma forma: atributos
+                # planos o dict, uno a uno por nombre).
                 if data:
-                    if "system" in data:
-                        for k, v in data["system"].items():
-                            if hasattr(config.system, k):
-                                setattr(config.system, k, v)
-
-                    # Similar para otras secciones
+                    for seccion in fields(config):
+                        valores = data.get(seccion.name)
+                        destino = getattr(config, seccion.name)
+                        if valores and is_dataclass(destino):
+                            for k, v in valores.items():
+                                if hasattr(destino, k):
+                                    setattr(destino, k, v)
             except Exception as e:
                 print(f"Error cargando configuración: {e}")
 
@@ -133,9 +141,15 @@ def save_settings(config: FernetOSConfig, yaml_path: str = "config/settings.yaml
             "default_water_source": config.system.default_water_source,
         },
         "parameters": {
-            "abv_ranges": config.parameters.abv_ranges,
-            "sugar_ranges": config.parameters.sugar_ranges,
-            "ph_ranges": config.parameters.ph_ranges,
+            "abv_min": config.parameters.abv_min,
+            "abv_max": config.parameters.abv_max,
+            "abv_default": config.parameters.abv_default,
+            "azucar_min": config.parameters.azucar_min,
+            "azucar_max": config.parameters.azucar_max,
+            "azucar_default": config.parameters.azucar_default,
+            "ph_min": config.parameters.ph_min,
+            "ph_max": config.parameters.ph_max,
+            "ph_default": config.parameters.ph_default,
         },
         "scaling": {
             "base_batch_size": config.scaling.base_batch_size,
@@ -148,7 +162,33 @@ def save_settings(config: FernetOSConfig, yaml_path: str = "config/settings.yaml
             "overextraction_warning_days": config.curves.overextraction_warning_days,
         },
         "sensory": {"attribute_weights": config.sensory.attribute_weights},
+        "backup": {
+            "auto_backup": config.backup.auto_backup,
+            "frecuencia": config.backup.frecuencia,
+            "ultimo_backup": config.backup.ultimo_backup,
+        },
     }
 
     with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+
+
+def backup_es_necesario(backup: BackupSettings, ahora: datetime) -> bool:
+    """Decide si corresponde disparar un backup automático.
+
+    Nunca se hizo backup, o el formato guardado es inválido -> hace falta uno.
+    Frecuencia desconocida cae al valor semanal por seguridad.
+    """
+    if not backup.auto_backup:
+        return False
+
+    if not backup.ultimo_backup:
+        return True
+
+    try:
+        ultimo = datetime.strptime(backup.ultimo_backup, BACKUP_TIMESTAMP_FORMAT)
+    except ValueError:
+        return True
+
+    dias_frecuencia = FRECUENCIA_A_DIAS.get(backup.frecuencia, 7)
+    return (ahora - ultimo).days >= dias_frecuencia

@@ -29,6 +29,35 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # =========================================================
 # INICIALIZACIÓN DEL SISTEMA
 # =========================================================
+def _verificar_backup_automatico(db):
+    """Hace un backup real si corresponde según la configuración guardada.
+
+    Se llama una sola vez por arranque (init_system está cacheado con
+    @st.cache_resource). No falla el arranque de la app si el backup no se
+    puede hacer: solo se registra el error.
+    """
+    from config.settings import load_settings, save_settings, backup_es_necesario
+
+    if not os.path.exists(db.db_path):
+        return  # BD recién creada, nada que respaldar todavía
+
+    try:
+        cfg = load_settings()
+        ahora = datetime.now()
+        if backup_es_necesario(cfg.backup, ahora):
+            import shutil
+
+            backup_path = db.db_path.replace(
+                ".db", f'_backup_{ahora.strftime("%Y%m%d_%H%M%S")}.db'
+            )
+            shutil.copy2(db.db_path, backup_path)
+            cfg.backup.ultimo_backup = ahora.strftime("%d/%m/%Y %H:%M")
+            save_settings(cfg)
+    except Exception as e:
+        # No debe impedir que la app arranque, pero tampoco fallar en silencio
+        st.warning(f"⚠️ No se pudo hacer el backup automático: {e}")
+
+
 @st.cache_resource
 def init_system():
     """Inicializa los componentes del sistema (cacheado)"""
@@ -46,6 +75,7 @@ def init_system():
         os.makedirs("data/schema", exist_ok=True)
 
         db = DatabaseManager()
+        _verificar_backup_automatico(db)
         repo = TinturaSQLRepository(db)
         calculator = FernetCalculator()
         visualizer = CurveVisualizer(output_dir="data/curves")
@@ -3055,28 +3085,28 @@ elif menu == "⚙️ Configuración":
     st.title("⚙️ Configuración del Sistema")
     st.caption("Personaliza los parámetros y preferencias de FernetOS")
 
-    # Inicializar configuración en sesión si no existe
+    from config.settings import load_settings, save_settings
+
+    # Inicializar configuración en sesión si no existe.
+    # parametros/pesos_evaluacion/base_datos se leen de config/settings.yaml
+    # (persisten entre reinicios); notificaciones/apariencia son cosméticos y
+    # quedan solo en sesión (ver Deferred aspects del spec de robustez).
     if "config_sistema" not in st.session_state:
+        _cfg = load_settings()
         st.session_state.config_sistema = {
             "version": "2.0.0",
             "parametros": {
-                "abv_min": 38.0,
-                "abv_max": 42.0,
-                "abv_default": 40.0,
-                "azucar_min": 160,
-                "azucar_max": 220,
-                "azucar_default": 195,
-                "ph_min": 4.8,
-                "ph_max": 5.6,
-                "ph_default": 5.2,
+                "abv_min": _cfg.parameters.abv_min,
+                "abv_max": _cfg.parameters.abv_max,
+                "abv_default": _cfg.parameters.abv_default,
+                "azucar_min": _cfg.parameters.azucar_min,
+                "azucar_max": _cfg.parameters.azucar_max,
+                "azucar_default": _cfg.parameters.azucar_default,
+                "ph_min": _cfg.parameters.ph_min,
+                "ph_max": _cfg.parameters.ph_max,
+                "ph_default": _cfg.parameters.ph_default,
             },
-            "pesos_evaluacion": {
-                "ataque": 0.20,
-                "complejidad": 0.20,
-                "equilibrio": 0.25,
-                "persistencia": 0.20,
-                "amargor": 0.15,
-            },
+            "pesos_evaluacion": dict(_cfg.sensory.attribute_weights),
             "notificaciones": {
                 "sobreextraccion": True,
                 "recordatorio_catas": True,
@@ -3089,9 +3119,9 @@ elif menu == "⚙️ Configuración":
                 "mostrar_metricas": True,
             },
             "base_datos": {
-                "auto_backup": True,
-                "backup_frecuencia": "semanal",
-                "ultimo_backup": None,
+                "auto_backup": _cfg.backup.auto_backup,
+                "backup_frecuencia": _cfg.backup.frecuencia,
+                "ultimo_backup": _cfg.backup.ultimo_backup,
             },
         }
 
@@ -3242,6 +3272,17 @@ elif menu == "⚙️ Configuración":
                 "ph_max": ph_max,
                 "ph_default": ph_default,
             }
+            _cfg = load_settings()
+            _cfg.parameters.abv_min = abv_min
+            _cfg.parameters.abv_max = abv_max
+            _cfg.parameters.abv_default = abv_default
+            _cfg.parameters.azucar_min = azucar_min
+            _cfg.parameters.azucar_max = azucar_max
+            _cfg.parameters.azucar_default = azucar_default
+            _cfg.parameters.ph_min = ph_min
+            _cfg.parameters.ph_max = ph_max
+            _cfg.parameters.ph_default = ph_default
+            save_settings(_cfg)
             st.success("✅ Parámetros guardados correctamente")
             st.balloons()
 
@@ -3337,13 +3378,17 @@ elif menu == "⚙️ Configuración":
         # Botón para guardar
         if st.button("💾 Guardar Pesos", type="primary", use_container_width=True):
             if abs(total_pesos - 1.0) < 0.01:
-                st.session_state.config_sistema["pesos_evaluacion"] = {
+                pesos = {
                     "ataque": peso_ataque,
                     "complejidad": peso_complejidad,
                     "equilibrio": peso_equilibrio,
                     "persistencia": peso_persistencia,
                     "amargor": peso_amargor,
                 }
+                st.session_state.config_sistema["pesos_evaluacion"] = pesos
+                _cfg = load_settings()
+                _cfg.sensory.attribute_weights = pesos
+                save_settings(_cfg)
                 st.success("✅ Pesos guardados correctamente")
             else:
                 st.error("❌ No se pueden guardar pesos que no sumen 1.0")
@@ -3580,6 +3625,23 @@ elif menu == "⚙️ Configuración":
                             value=datetime.strptime("03:00", "%H:%M").time(),
                             key="db_hora",
                         )
+                    else:
+                        backup_frecuencia = st.session_state.config_sistema[
+                            "base_datos"
+                        ].get("backup_frecuencia", "semanal")
+
+                    if st.button("💾 Guardar Configuración de Backup"):
+                        st.session_state.config_sistema["base_datos"][
+                            "auto_backup"
+                        ] = auto_backup
+                        st.session_state.config_sistema["base_datos"][
+                            "backup_frecuencia"
+                        ] = backup_frecuencia
+                        _cfg = load_settings()
+                        _cfg.backup.auto_backup = auto_backup
+                        _cfg.backup.frecuencia = backup_frecuencia
+                        save_settings(_cfg)
+                        st.success("✅ Configuración de backup guardada")
 
             st.divider()
 
@@ -3597,10 +3659,16 @@ elif menu == "⚙️ Configuración":
 
                     shutil.copy2(db_path, backup_path)
 
-                    # Registrar en configuración
+                    # Registrar en configuración (sesión + disco, para que el
+                    # chequeo de backup automático al iniciar la app sepa
+                    # cuándo fue el último backup real)
+                    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
                     st.session_state.config_sistema["base_datos"][
                         "ultimo_backup"
-                    ] = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    ] = ahora
+                    _cfg = load_settings()
+                    _cfg.backup.ultimo_backup = ahora
+                    save_settings(_cfg)
 
                     st.success(f"✅ Backup creado: {backup_path}")
 

@@ -1,19 +1,33 @@
-system:
-  version: "1.0"
-  default_alcohol_base: 96.0  # ABV alcohol base
-  default_water_source: "osmotizada"
-
+backup:
+  auto_backup: true
+  frecuencia: semanal
+  ultimo_backup: 05/09/2026 20:55
+curves:
+  optimal_threshold: 2.0
+  overextraction_warning_days: 3
+  sampling_frequency_days: 2
 parameters:
-  abv_ranges:
-    min_final: 38.0
-    max_final: 42.0
-  sugar_ranges:
-    min_gpl: 160
-    max_gpl: 220
-  ph_ranges:
-    min_final: 4.8
-    max_final: 5.6
-
+  abv_default: 40.0
+  abv_max: 42.0
+  abv_min: 38.0
+  azucar_default: 195
+  azucar_max: 220
+  azucar_min: 160
+  ph_default: 5.2
+  ph_max: 5.6
+  ph_min: 4.8
 scaling:
-  base_batch_size: 10  # litros
-  pilot_batch_size: 0.5  # 500ml
+  base_batch_size: 10
+  industrial_min: 100.0
+  pilot_batch_size: 0.5
+sensory:
+  attribute_weights:
+    amargor: 0.15
+    ataque: 0.2
+    complejidad: 0.2
+    equilibrio: 0.25
+    persistencia: 0.2
+system:
+  default_alcohol_base: 96.0
+  default_water_source: osmotizada
+  version: '1.0'
