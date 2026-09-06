@@ -860,6 +860,30 @@ Especias Cálidas	80 ml
 Cítricos	120 ml
 Regaliz Correctivo	50 ml
 Azúcar	210 g/L
+Receta 4: Gancia Casero (Infusión Directa)
+Para 3.5-5.5L según agua elegida:
+
+Componente	Cantidad	Función
+Alcohol 96%	500 ml	Base alcohólica
+Cáscara de pomelo	1 unidad	Amargor cítrico
+Cáscara de limón	1 unidad	Amargor cítrico
+Cáscara de naranja	1 unidad	Amargor cítrico
+Romero	2 ramas	Aromático
+Clavo de olor	4 unidades	Especiado
+Agua	3000-5000 ml	Dilución (parametrizable)
+Azúcar	800-1000 g	Dulzor
+
+Maceración: 40 días, agitando cada 2 días.
+
+⚠️ A diferencia de las recetas de Fernet de arriba, esta no usa tinturas modulares separadas: todos los botánicos (cáscaras, romero, clavo) maceran juntos en un solo lote de alcohol y agua. Podés cargarlo en el sistema como una única tintura con composición mixta y grupo funcional "experimental", o separar cada botánico en su propia tintura (cítricos_amargos, botánicos_aromáticos, especiado_suave) si querés más control y trazabilidad individual.
+
+Perfil esperado:
+
+ABV con 3L de agua: ~13.7%
+
+ABV con 5L de agua: ~8.7%
+
+Grupos funcionales involucrados: cítricos_amargos (cáscaras), botánicos_aromáticos (romero), especiado_suave (clavo)
 🔧 SOLUCIÓN DE PROBLEMAS
 Error: "No module named 'modules'"
 Causa: Python no encuentra los módulos del sistema.
