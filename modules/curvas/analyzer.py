@@ -43,7 +43,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from modules.tinturas.models import Tintura, RegistroExtraccion, GrupoFuncional
+from modules.tinturas.models import Tintura, RegistroExtraccion, GrupoFuncional, Producto
 
 
 @dataclass
@@ -246,6 +246,16 @@ class CurveAnalyzer:
         elif grupo == GrupoFuncional.CITRICOS:
             # Cítricos: 5-7 días
             return min(7, ultimo_registro.dia + 1)
+
+        elif self.tintura.producto == Producto.GANCIA:
+            # Dato real de receta de Gancia casero (infusión directa de
+            # cáscaras cítricas, romero y clavo en alcohol+agua): 40 días
+            # de maceración, agitación cada 2 días. Se aplica igual a los
+            # 4 grupos de Gancia porque en esta receta todo macera junto
+            # en un solo lote, no por separado como en Fernet.
+            if ultimo_registro.dia >= 40:
+                return ultimo_registro.dia
+            return 40
 
         return ultimo_registro.dia
 

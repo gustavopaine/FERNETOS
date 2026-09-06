@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 
 from modules.tinturas.models import (
+    GRUPOS_POR_PRODUCTO,
     ComposicionBotanica,
     GrupoFuncional,
     ParametrosExtraccion,
@@ -104,3 +105,19 @@ def test_grupos_disponibles_para_todos_o_none_incluye_ambos_sin_duplicar_experim
     assert "amargos_estructurales" in grupos
     assert "quinados" in grupos
     assert grupos.count("experimental") == 1
+
+
+def test_grupo_citricos_amargos_reemplaza_a_citricos_dulces():
+    """Receta real de Gancia casero: las cáscaras de pomelo/limón/naranja
+    aportan amargor, no dulzor - la taxonomía usa citricos_amargos."""
+    assert GrupoFuncional.CITRICOS_AMARGOS.value == "citricos_amargos"
+    assert not hasattr(GrupoFuncional, "CITRICOS_DULCES")
+    assert GrupoFuncional.CITRICOS_AMARGOS in GRUPOS_POR_PRODUCTO[Producto.GANCIA]
+
+
+def test_tintura_gancia_con_grupo_citricos_amargos_no_lanza():
+    Tintura(
+        nombre="Cáscaras cítricas",
+        producto=Producto.GANCIA,
+        grupo_funcional=GrupoFuncional.CITRICOS_AMARGOS,
+    )

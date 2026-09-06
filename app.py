@@ -135,7 +135,7 @@ def get_grupo_color(grupo):
         "correctivos": "#9467bd",  # púrpura
         "quinados": "#17becf",  # celeste
         "botanicos_aromaticos": "#bcbd22",  # oliva
-        "citricos_dulces": "#e377c2",  # rosa
+        "citricos_amargos": "#e377c2",  # rosa
         "especiado_suave": "#8c9eff",  # lavanda
         "experimental": "#8c564b",  # marrón
     }

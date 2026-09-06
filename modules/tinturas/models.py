@@ -29,10 +29,10 @@ class GrupoFuncional(Enum):
     CORRECTIVOS = "correctivos"  # Regaliz, clavo controlado, etc.
 
     # Gancia
-    QUINADOS = "quinados"
-    BOTANICOS_AROMATICOS = "botanicos_aromaticos"
-    CITRICOS_DULCES = "citricos_dulces"
-    ESPECIADO_SUAVE = "especiado_suave"
+    QUINADOS = "quinados"  # Quina/genciana - sin receta propia todavía, definido para uso futuro
+    BOTANICOS_AROMATICOS = "botanicos_aromaticos"  # ej. romero
+    CITRICOS_AMARGOS = "citricos_amargos"  # cáscaras: pomelo, limón, naranja - aportan amargor
+    ESPECIADO_SUAVE = "especiado_suave"  # ej. clavo de olor
 
     # Compartido
     EXPERIMENTAL = "experimental"
@@ -50,7 +50,7 @@ GRUPOS_POR_PRODUCTO: Dict[Producto, List[GrupoFuncional]] = {
     Producto.GANCIA: [
         GrupoFuncional.QUINADOS,
         GrupoFuncional.BOTANICOS_AROMATICOS,
-        GrupoFuncional.CITRICOS_DULCES,
+        GrupoFuncional.CITRICOS_AMARGOS,
         GrupoFuncional.ESPECIADO_SUAVE,
         GrupoFuncional.EXPERIMENTAL,
     ],

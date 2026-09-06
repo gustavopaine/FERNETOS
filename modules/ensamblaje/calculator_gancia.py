@@ -173,3 +173,26 @@ class GanciaCalculator:
             float: Volumen final en ml
         """
         return volumen_sin_azucar_ml + (azucar_g * 0.6)
+
+    @staticmethod
+    def calcular_abv_infusion(
+        alcohol_ml: float, alcohol_abv: float, agua_ml: float
+    ) -> float:
+        """
+        Calcula el ABV de una Gancia casera hecha por infusión directa:
+        alcohol + cáscaras/hierbas macerando junto con agua, sin base
+        vínica ni fortificación por separado (a diferencia de
+        calcular_abv_blend, que sí asume vino). Azúcar y sólidos (cáscaras,
+        hierbas) no aportan alcohol y no entran en este cálculo - solo
+        diluyen el ABV al sumar volumen, lo cual ya queda reflejado al
+        usar agua_ml como el volumen de dilución.
+
+        Args:
+            alcohol_ml: Volumen de alcohol puro utilizado (ej. 500ml de 96°)
+            alcohol_abv: Graduación del alcohol (ej. 96.0)
+            agua_ml: Volumen de agua agregado
+
+        Returns:
+            float: ABV resultante
+        """
+        return abv_resultante([(alcohol_ml, alcohol_abv)], alcohol_ml + agua_ml)
