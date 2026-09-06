@@ -133,6 +133,10 @@ def get_grupo_color(grupo):
         "especias_calidas": "#2ca02c",  # verde
         "citricos": "#d62728",  # rojo
         "correctivos": "#9467bd",  # púrpura
+        "quinados": "#17becf",  # celeste
+        "botanicos_aromaticos": "#bcbd22",  # oliva
+        "citricos_dulces": "#e377c2",  # rosa
+        "especiado_suave": "#8c9eff",  # lavanda
         "experimental": "#8c564b",  # marrón
     }
     return colores.get(grupo, "#7f7f7f")
@@ -163,6 +167,7 @@ with st.sidebar:
             "🧪 Tinturas",
             "📈 Curvas de Extracción",
             "🧮 Ensamblaje",
+            "🍷 Ensamblaje Gancia",
             "🎯 Micromezclas",
             "⚖️ Pruebas A/B",
             "📦 Stock",
@@ -291,26 +296,38 @@ elif menu == "🧪 Tinturas":
         st.subheader("Tinturas Registradas")
 
         # Filtros
-        col1, col2, col3 = st.columns(3)
+        from modules.tinturas.models import GRUPOS_POR_PRODUCTO, Producto
+
+        col0, col1, col2, col3 = st.columns(4)
+        with col0:
+            filtro_producto = st.selectbox(
+                "Producto", ["Todos"] + [p.value for p in Producto], key="listado_producto"
+            )
         with col1:
             filtro_estado = st.selectbox(
                 "Estado",
                 ["Todos", "en_maceracion", "en_estabilizacion", "lista", "agotada"],
             )
         with col2:
-            from modules.tinturas.models import GrupoFuncional
-
+            grupos_disponibles = (
+                [g.value for grupos in GRUPOS_POR_PRODUCTO.values() for g in grupos]
+                if filtro_producto == "Todos"
+                else [g.value for g in GRUPOS_POR_PRODUCTO[Producto(filtro_producto)]]
+            )
+            # dict.fromkeys en vez de set(): preserva el orden y no repite
+            # EXPERIMENTAL cuando "Todos" junta los grupos de ambos productos
             filtro_grupo = st.selectbox(
-                "Grupo", ["Todos"] + [g.value for g in GrupoFuncional]
+                "Grupo", ["Todos"] + list(dict.fromkeys(grupos_disponibles))
             )
         with col3:
             busqueda = st.text_input("🔍 Buscar", placeholder="Nombre o ID")
 
         # Obtener tinturas
+        filtro_producto_valor = None if filtro_producto == "Todos" else filtro_producto
         if filtro_estado == "Todos":
-            tinturas = repo.listar()
+            tinturas = repo.listar(producto=filtro_producto_valor)
         else:
-            tinturas = repo.listar(estado=filtro_estado)
+            tinturas = repo.listar(estado=filtro_estado, producto=filtro_producto_valor)
 
         if filtro_grupo != "Todos":
             tinturas = [
@@ -335,6 +352,7 @@ elif menu == "🧪 Tinturas":
                     {
                         "ID": t.id,
                         "Nombre": t.nombre,
+                        "Producto": t.producto.value if t.producto else "N/A",
                         "Grupo": (
                             t.grupo_funcional.value if t.grupo_funcional else "N/A"
                         ),
@@ -418,7 +436,19 @@ elif menu == "🧪 Tinturas":
             GrupoFuncional,
             ComposicionBotanica,
             ParametrosExtraccion,
+            GRUPOS_POR_PRODUCTO,
+            Producto,
         )
+
+        # Fuera del form: un st.form no re-renderiza sus propios widgets al
+        # cambiar uno de ellos, así que el selector de Producto (que decide
+        # qué grupos funcionales mostrar) tiene que vivir afuera.
+        producto_nueva_tintura = st.selectbox(
+            "Producto*",
+            options=[p.value for p in Producto],
+            key="nueva_tintura_producto",
+        )
+        grupos_para_producto = GRUPOS_POR_PRODUCTO[Producto(producto_nueva_tintura)]
 
         with st.form("form_nueva_tintura", border=True):
             col1, col2 = st.columns(2)
@@ -430,7 +460,7 @@ elif menu == "🧪 Tinturas":
                 )
                 grupo = st.selectbox(
                     "Grupo funcional*",
-                    options=[g.value for g in GrupoFuncional],
+                    options=[g.value for g in grupos_para_producto],
                     index=0,
                 )
                 abv = st.number_input(
@@ -537,6 +567,7 @@ elif menu == "🧪 Tinturas":
 
                     tintura = Tintura(
                         nombre=nombre,
+                        producto=Producto(producto_nueva_tintura),
                         grupo_funcional=grupo_map[grupo],
                         composicion=comps,
                         peso_total_materia_seca_g=peso,
@@ -1313,6 +1344,261 @@ elif menu == "🧮 Ensamblaje":
             )
             fig.update_layout(title="Número de Tinturas por Blend", height=300)
             st.plotly_chart(fig, use_container_width=True)
+
+# =========================================================
+# MÓDULO DE ENSAMBLAJE GANCIA - BASE VÍNICA
+# =========================================================
+elif menu == "🍷 Ensamblaje Gancia":
+    st.title("🍷 Ensamblaje de Gancia")
+    st.caption("Base vínica fortificada - motor de cálculo independiente del de Fernet")
+
+    if not repo:
+        st.error("Error: Repositorio no disponible")
+        st.stop()
+
+    from modules.ensamblaje.calculator_gancia import (
+        ComposicionBlendGancia,
+        GanciaBlendParams,
+        GanciaCalculator,
+    )
+    from modules.tinturas.models import Producto
+
+    gancia_calculator = GanciaCalculator()
+
+    st.subheader("Crear Nuevo Blend de Gancia")
+
+    col_p1, col_p2, col_p3 = st.columns(3)
+
+    with col_p1:
+        volumen_gancia = st.number_input(
+            "📊 Volumen objetivo (L)",
+            min_value=0.5,
+            max_value=100.0,
+            value=10.0,
+            step=0.5,
+            key="gancia_volumen",
+        )
+        abv_gancia = st.number_input(
+            "🥃 ABV objetivo (%)",
+            min_value=15.0,
+            max_value=18.0,
+            value=17.0,
+            step=0.5,
+            key="gancia_abv",
+        )
+
+    with col_p2:
+        vino_pct_gancia = st.slider(
+            "🍷 % Vino sobre el volumen",
+            min_value=75.0,
+            max_value=80.0,
+            value=78.0,
+            step=0.5,
+            key="gancia_vino_pct",
+        )
+        vino_abv_gancia = st.number_input(
+            "Grado del vino base (%)",
+            min_value=8.0,
+            max_value=15.0,
+            value=12.0,
+            step=0.5,
+            key="gancia_vino_abv",
+        )
+        alcohol_fortificacion_abv_gancia = st.number_input(
+            "Grado del alcohol de fortificación (%)",
+            min_value=90.0,
+            max_value=96.5,
+            value=96.0,
+            step=0.5,
+            key="gancia_fortificacion_abv",
+        )
+
+    with col_p3:
+        azucar_pct_gancia = st.slider(
+            "🍬 Azúcar (% p/v)",
+            min_value=8.0,
+            max_value=12.0,
+            value=10.0,
+            step=0.5,
+            key="gancia_azucar_pct",
+            help="Gramos de azúcar seca por 100ml",
+        )
+        acido_citrico_gancia = st.number_input(
+            "🍋 Ácido cítrico (g/L)",
+            min_value=0.0,
+            max_value=5.0,
+            value=0.0,
+            step=0.1,
+            key="gancia_acido_citrico",
+        )
+        caramelo_gancia = st.number_input(
+            "🎨 Caramelo E150 (ml)",
+            min_value=0.0,
+            max_value=50.0,
+            value=0.0,
+            step=1.0,
+            key="gancia_caramelo",
+        )
+
+    st.divider()
+
+    st.subheader("🧪 Tinturas de Gancia Disponibles en Stock")
+
+    tinturas_gancia_stock = repo.listar(estado="lista", producto=Producto.GANCIA.value)
+
+    tinturas_seleccionadas_gancia = {}
+
+    if not tinturas_gancia_stock:
+        st.warning(
+            "⚠️ No hay tinturas de Gancia disponibles en stock. Creá y finalizá "
+            "tinturas de producto Gancia en la sección 🧪 Tinturas."
+        )
+    else:
+        num_tinturas_g = len(tinturas_gancia_stock)
+
+        for i in range(0, num_tinturas_g, 2):
+            cols = st.columns(2)
+            for offset, col in enumerate(cols):
+                idx = i + offset
+                if idx >= num_tinturas_g:
+                    continue
+                t = tinturas_gancia_stock[idx]
+                with col:
+                    with st.container(border=True):
+                        st.write(f"**{t.nombre}**")
+                        st.caption(
+                            f"📦 Stock: {t.volumen_disponible_ml:.0f} ml | 🏷️ {t.grupo_funcional.value if t.grupo_funcional else 'N/A'}"
+                        )
+                        ml = st.number_input(
+                            f"ml para {t.nombre[:15]}...",
+                            min_value=0.0,
+                            max_value=float(t.volumen_disponible_ml),
+                            value=0.0,
+                            step=5.0,
+                            key=f"gancia_t_{t.id}",
+                            format="%.0f",
+                        )
+                        if ml > 0:
+                            tinturas_seleccionadas_gancia[t.id] = ml
+                            st.caption(f"✅ Usando {ml:.0f} ml")
+
+    st.divider()
+
+    if st.button("🍷 Calcular Blend de Gancia", type="primary", use_container_width=True):
+        with st.spinner("Calculando blend..."):
+            try:
+                params_gancia = GanciaBlendParams(
+                    volumen_objetivo_litros=volumen_gancia,
+                    abv_objetivo=abv_gancia,
+                    vino_pct=vino_pct_gancia / 100,
+                    vino_abv=vino_abv_gancia,
+                    alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
+                    azucar_pct_wv=azucar_pct_gancia,
+                    acido_citrico_g_l=acido_citrico_gancia,
+                    caramelo_ml=caramelo_gancia,
+                )
+
+                tinturas_ml_total = sum(tinturas_seleccionadas_gancia.values())
+                vino_ml, alcohol_fortificacion_ml, agua_ml = (
+                    gancia_calculator.calcular_base_vino_alcohol(
+                        params_gancia, tinturas_ml_total
+                    )
+                )
+
+                tinturas_data_gancia = {}
+                for tid in tinturas_seleccionadas_gancia.keys():
+                    t = repo.get_by_id(tid)
+                    if t:
+                        tinturas_data_gancia[tid] = t
+
+                azucar_g = GanciaCalculator.calcular_azucar(
+                    azucar_pct_gancia, params_gancia.volumen_objetivo_ml
+                )
+
+                composicion_gancia = ComposicionBlendGancia(
+                    vino_ml=vino_ml,
+                    alcohol_fortificacion_ml=alcohol_fortificacion_ml,
+                    tinturas=tinturas_seleccionadas_gancia,
+                    agua_ml=agua_ml,
+                    azucar_g=azucar_g,
+                    acido_citrico_g=acido_citrico_gancia * volumen_gancia,
+                    caramelo_ml=caramelo_gancia,
+                )
+
+                abv_calculado_gancia = GanciaCalculator.calcular_abv_blend(
+                    composicion_gancia,
+                    tinturas_data_gancia,
+                    vino_abv=vino_abv_gancia,
+                    alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
+                )
+
+                st.success("✅ Blend de Gancia calculado exitosamente!")
+
+                if agua_ml < 0:
+                    st.warning(
+                        "⚠️ El agua remanente da negativo: el % de vino más las "
+                        "tinturas ya superan el volumen objetivo. Bajá el % de "
+                        "vino o el volumen de tinturas."
+                    )
+
+                col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
+                with col_r1:
+                    with st.container(border=True):
+                        st.metric("ABV Calculado", f"{abv_calculado_gancia:.2f}%")
+
+                with col_r2:
+                    with st.container(border=True):
+                        st.metric(
+                            "Volumen total",
+                            f"{composicion_gancia.volumen_total_ml/1000:.2f}L",
+                        )
+
+                with col_r3:
+                    with st.container(border=True):
+                        st.metric("Vino base", f"{vino_ml:.0f}ml")
+
+                with col_r4:
+                    with st.container(border=True):
+                        st.metric(
+                            "Alcohol fortificación", f"{alcohol_fortificacion_ml:.0f}ml"
+                        )
+
+                st.divider()
+
+                st.subheader("📝 Receta Completa")
+
+                col_receta1, col_receta2 = st.columns(2)
+
+                with col_receta1:
+                    with st.container(border=True):
+                        st.write("**Base vínica:**")
+                        st.write(f"- Vino base ({vino_abv_gancia}%): {vino_ml:.0f} ml")
+                        st.write(
+                            f"- Alcohol fortificación ({alcohol_fortificacion_abv_gancia}%): "
+                            f"{alcohol_fortificacion_ml:.0f} ml"
+                        )
+                        st.write(f"- Agua: {agua_ml:.0f} ml")
+                        st.write(f"- Azúcar: {azucar_g:.0f} g")
+                        st.write(f"- Ácido cítrico: {composicion_gancia.acido_citrico_g:.1f} g")
+                        st.write(f"- Caramelo E150: {caramelo_gancia:.1f} ml")
+
+                with col_receta2:
+                    with st.container(border=True):
+                        st.write("**Tinturas:**")
+                        if tinturas_seleccionadas_gancia:
+                            for tid, ml in tinturas_seleccionadas_gancia.items():
+                                t = tinturas_data_gancia.get(tid)
+                                if t:
+                                    st.write(f"- {t.nombre}: {ml:.0f} ml")
+                        else:
+                            st.caption("Sin tinturas en este blend")
+
+            except Exception as e:
+                st.error(f"Error calculando blend de Gancia: {e}")
+                import traceback
+
+                st.error(traceback.format_exc())
 
 # =========================================================
 # MÓDULO DE MICROMEZCLAS - VERSIÓN SIMPLIFICADA
@@ -2406,7 +2692,16 @@ elif menu == "📦 Stock":
         st.divider()
 
         # Filtros
-        col_f1, col_f2, col_f3 = st.columns(3)
+        from modules.tinturas.models import GRUPOS_POR_PRODUCTO, Producto
+
+        col_f0, col_f1, col_f2, col_f3 = st.columns(4)
+
+        with col_f0:
+            filtro_producto_stock = st.selectbox(
+                "Filtrar por producto",
+                ["Todos"] + [p.value for p in Producto],
+                key="stock_filtro_producto",
+            )
 
         with col_f1:
             filtro_estado_stock = st.selectbox(
@@ -2416,11 +2711,14 @@ elif menu == "📦 Stock":
             )
 
         with col_f2:
-            from modules.tinturas.models import GrupoFuncional
-
+            grupos_stock_disponibles = (
+                [g.value for grupos in GRUPOS_POR_PRODUCTO.values() for g in grupos]
+                if filtro_producto_stock == "Todos"
+                else [g.value for g in GRUPOS_POR_PRODUCTO[Producto(filtro_producto_stock)]]
+            )
             filtro_grupo_stock = st.selectbox(
                 "Filtrar por grupo",
-                ["Todos"] + [g.value for g in GrupoFuncional],
+                ["Todos"] + list(dict.fromkeys(grupos_stock_disponibles)),
                 key="stock_filtro_grupo",
             )
 
@@ -2431,6 +2729,13 @@ elif menu == "📦 Stock":
 
         # Aplicar filtros
         tinturas_filtradas = tinturas_con_stock.copy()
+
+        if filtro_producto_stock != "Todos":
+            tinturas_filtradas = [
+                t
+                for t in tinturas_filtradas
+                if t.producto and t.producto.value == filtro_producto_stock
+            ]
 
         if filtro_estado_stock != "Todos":
             tinturas_filtradas = [
@@ -2489,6 +2794,7 @@ elif menu == "📦 Stock":
                     {
                         "ID": t.id,
                         "Nombre": t.nombre,
+                        "Producto": t.producto.value if t.producto else "N/A",
                         "Grupo": (
                             t.grupo_funcional.value if t.grupo_funcional else "N/A"
                         ),
@@ -3053,6 +3359,7 @@ elif menu == "📦 Stock":
                         {
                             "ID": t.id,
                             "Nombre": t.nombre,
+                            "Producto": t.producto.value if t.producto else "",
                             "Grupo": (
                                 t.grupo_funcional.value if t.grupo_funcional else ""
                             ),
