@@ -11,15 +11,50 @@ import uuid
 import json
 
 
-class GrupoFuncional(Enum):
-    """Grupos funcionales de tinturas según su rol en el fernet"""
+class Producto(Enum):
+    """Producto que se está formulando con el sistema"""
 
+    FERNET = "fernet"
+    GANCIA = "gancia"
+
+
+class GrupoFuncional(Enum):
+    """Grupos funcionales de tinturas según su rol en el producto"""
+
+    # Fernet
     AMARGOS_ESTRUCTURALES = "amargos_estructurales"
     AROMATICA_ALTA = "aromatica_alta"
     ESPECIAS_CALIDAS = "especias_calidas"
     CITRICOS = "citricos"
     CORRECTIVOS = "correctivos"  # Regaliz, clavo controlado, etc.
+
+    # Gancia
+    QUINADOS = "quinados"
+    BOTANICOS_AROMATICOS = "botanicos_aromaticos"
+    CITRICOS_DULCES = "citricos_dulces"
+    ESPECIADO_SUAVE = "especiado_suave"
+
+    # Compartido
     EXPERIMENTAL = "experimental"
+
+
+GRUPOS_POR_PRODUCTO: Dict[Producto, List[GrupoFuncional]] = {
+    Producto.FERNET: [
+        GrupoFuncional.AMARGOS_ESTRUCTURALES,
+        GrupoFuncional.AROMATICA_ALTA,
+        GrupoFuncional.ESPECIAS_CALIDAS,
+        GrupoFuncional.CITRICOS,
+        GrupoFuncional.CORRECTIVOS,
+        GrupoFuncional.EXPERIMENTAL,
+    ],
+    Producto.GANCIA: [
+        GrupoFuncional.QUINADOS,
+        GrupoFuncional.BOTANICOS_AROMATICOS,
+        GrupoFuncional.CITRICOS_DULCES,
+        GrupoFuncional.ESPECIADO_SUAVE,
+        GrupoFuncional.EXPERIMENTAL,
+    ],
+}
 
 
 class EstadoTintura(Enum):
@@ -143,6 +178,7 @@ class Tintura:
         default_factory=lambda: f"T-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
     )
     nombre: str = ""
+    producto: Producto = Producto.FERNET
     grupo_funcional: Optional[GrupoFuncional] = None
     version: str = "1.0.0"
 
@@ -182,12 +218,14 @@ class Tintura:
         """Validaciones y cálculos automáticos"""
         from utils.validators import (
             validar_composicion_botanica,
+            validar_grupo_funcional_para_producto,
             validar_parametros_extraccion,
         )
 
         validar_composicion_botanica(self.composicion)
         if self.parametros is not None:
             validar_parametros_extraccion(self.parametros)
+        validar_grupo_funcional_para_producto(self.producto, self.grupo_funcional)
 
         if self.fecha_inicio is None:
             self.fecha_inicio = datetime.now()
@@ -257,6 +295,7 @@ class Tintura:
         return {
             "id": self.id,
             "nombre": self.nombre,
+            "producto": self.producto.value if self.producto else None,
             "grupo_funcional": (
                 self.grupo_funcional.value if self.grupo_funcional else None
             ),

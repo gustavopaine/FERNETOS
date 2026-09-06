@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 """Validaciones de datos para tinturas."""
 
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from modules.tinturas.models import ComposicionBotanica, ParametrosExtraccion
+    from modules.tinturas.models import (
+        ComposicionBotanica,
+        GrupoFuncional,
+        ParametrosExtraccion,
+        Producto,
+    )
 
 PORCENTAJE_TOLERANCIA = 0.5
 
@@ -41,4 +46,23 @@ def validar_parametros_extraccion(parametros: "ParametrosExtraccion") -> None:
     if parametros.tiempo_estimado_dias <= 0:
         raise ValueError(
             f"tiempo_estimado_dias debe ser positivo: {parametros.tiempo_estimado_dias}"
+        )
+
+
+def validar_grupo_funcional_para_producto(
+    producto: "Producto", grupo: Optional["GrupoFuncional"]
+) -> None:
+    """Valida que el grupo funcional corresponda al producto de la tintura.
+
+    Sin grupo asignado todavía es válido (mismo criterio que una
+    composición vacía: estado transitorio del wizard o rehidratación).
+    """
+    if grupo is None:
+        return
+
+    from modules.tinturas.models import GRUPOS_POR_PRODUCTO
+
+    if grupo not in GRUPOS_POR_PRODUCTO[producto]:
+        raise ValueError(
+            f"El grupo '{grupo.value}' no es válido para el producto '{producto.value}'"
         )

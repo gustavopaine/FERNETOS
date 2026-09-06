@@ -9,7 +9,9 @@ import pytest
 
 from modules.tinturas.models import (
     ComposicionBotanica,
+    GrupoFuncional,
     ParametrosExtraccion,
+    Producto,
     Tintura,
 )
 
@@ -45,3 +47,39 @@ def test_tintura_con_abv_invalido_lanza():
             nombre="Amargos",
             parametros=ParametrosExtraccion(abv_objetivo=150.0, tiempo_estimado_dias=18),
         )
+
+
+def test_tintura_default_producto_es_fernet():
+    t = Tintura(nombre="Amargos")
+    assert t.producto == Producto.FERNET
+
+
+def test_tintura_gancia_con_grupo_gancia_no_lanza():
+    Tintura(
+        nombre="Quinado Base",
+        producto=Producto.GANCIA,
+        grupo_funcional=GrupoFuncional.QUINADOS,
+    )
+
+
+def test_tintura_gancia_con_grupo_fernet_lanza():
+    with pytest.raises(ValueError):
+        Tintura(
+            nombre="Quinado Base",
+            producto=Producto.GANCIA,
+            grupo_funcional=GrupoFuncional.AMARGOS_ESTRUCTURALES,
+        )
+
+
+def test_tintura_fernet_con_grupo_gancia_lanza():
+    with pytest.raises(ValueError):
+        Tintura(
+            nombre="Amargos",
+            producto=Producto.FERNET,
+            grupo_funcional=GrupoFuncional.QUINADOS,
+        )
+
+
+def test_tintura_to_dict_incluye_producto():
+    t = Tintura(nombre="Quinado Base", producto=Producto.GANCIA)
+    assert t.to_dict()["producto"] == "gancia"
