@@ -5,6 +5,7 @@
         CREATE TABLE IF NOT EXISTS tinturas (
             id TEXT PRIMARY KEY,
             nombre TEXT NOT NULL,
+            producto TEXT NOT NULL DEFAULT 'fernet',
             grupo_funcional TEXT NOT NULL,
             version TEXT DEFAULT '1.0.0',
             peso_materia_seca_g REAL NOT NULL,

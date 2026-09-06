@@ -16,6 +16,7 @@ from modules.tinturas.models import (
     EstadoTintura,
     GrupoFuncional,
     ParametrosExtraccion,
+    Producto,
     RegistroExtraccion,
     Tintura,
 )
@@ -98,6 +99,37 @@ def test_listar_filtra_por_estado_y_grupo(repo):
 
     assert [t.id for t in solo_amargos] == [t1.id]
     assert [t.id for t in solo_listas] == [t2.id]
+
+
+def test_guardar_y_recuperar_conserva_producto_gancia(repo):
+    tintura = Tintura(
+        nombre="Quinado Base",
+        producto=Producto.GANCIA,
+        grupo_funcional=GrupoFuncional.QUINADOS,
+    )
+
+    repo.guardar(tintura)
+    recuperada = repo.get_by_id(tintura.id)
+
+    assert recuperada.producto == Producto.GANCIA
+    assert recuperada.grupo_funcional == GrupoFuncional.QUINADOS
+
+
+def test_listar_filtra_por_producto(repo):
+    fernet = _tintura_amargos()
+    gancia = Tintura(
+        nombre="Quinado Base",
+        producto=Producto.GANCIA,
+        grupo_funcional=GrupoFuncional.QUINADOS,
+    )
+    repo.guardar(fernet)
+    repo.guardar(gancia)
+
+    solo_gancia = repo.listar(producto=Producto.GANCIA.value)
+    solo_fernet = repo.listar(producto=Producto.FERNET.value)
+
+    assert [t.id for t in solo_gancia] == [gancia.id]
+    assert [t.id for t in solo_fernet] == [fernet.id]
 
 
 def test_eliminar_borra_tintura_y_no_deja_huerfanos(repo):

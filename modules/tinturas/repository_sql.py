@@ -12,6 +12,7 @@ from modules.tinturas.models import (
     GrupoFuncional,
     ComposicionBotanica,
     ParametrosExtraccion,
+    Producto,
     RegistroExtraccion,
     EstadoTintura,
     ControlCalidad,
@@ -39,6 +40,7 @@ class TinturaSQLRepository:
         tintura_data = {
             "id": tintura.id,
             "nombre": tintura.nombre,
+            "producto": tintura.producto.value if tintura.producto else Producto.FERNET.value,
             "grupo_funcional": (
                 tintura.grupo_funcional.value if tintura.grupo_funcional else None
             ),
@@ -79,11 +81,11 @@ class TinturaSQLRepository:
 
         # Usar INSERT OR REPLACE para upsert
         query = """
-        INSERT OR REPLACE INTO tinturas 
-        (id, nombre, grupo_funcional, version, peso_materia_seca_g, volumen_alcohol_ml,
+        INSERT OR REPLACE INTO tinturas
+        (id, nombre, producto, grupo_funcional, version, peso_materia_seca_g, volumen_alcohol_ml,
          fecha_inicio, fecha_corte_estimada, fecha_corte_real, fecha_estabilizacion_fin,
          estado, volumen_disponible_ml, ubicacion_almacen, observaciones, ph_medido, alcohol_medido)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         self.db.ejecutar(query, tuple(tintura_data.values()))
@@ -184,6 +186,13 @@ class TinturaSQLRepository:
             peso_total_materia_seca_g=result["peso_materia_seca_g"] or 0,
             volumen_alcohol_ml=result["volumen_alcohol_ml"] or 0,
         )
+
+        # Asignar producto
+        if result["producto"]:
+            try:
+                tintura.producto = Producto(result["producto"])
+            except ValueError:
+                tintura.producto = Producto.FERNET
 
         # Asignar grupo funcional
         if result["grupo_funcional"]:
@@ -310,7 +319,10 @@ class TinturaSQLRepository:
         return tintura
 
     def listar(
-        self, estado: Optional[str] = None, grupo: Optional[str] = None
+        self,
+        estado: Optional[str] = None,
+        grupo: Optional[str] = None,
+        producto: Optional[str] = None,
     ) -> List[Tintura]:
         """
         Lista tinturas con filtros opcionales.
@@ -318,6 +330,7 @@ class TinturaSQLRepository:
         Args:
             estado: Filtrar por estado
             grupo: Filtrar por grupo funcional
+            producto: Filtrar por producto ("fernet" o "gancia")
 
         Returns:
             List[Tintura]: Lista de tinturas
@@ -332,6 +345,10 @@ class TinturaSQLRepository:
         if grupo:
             query += " AND grupo_funcional = ?"
             params.append(grupo)
+
+        if producto:
+            query += " AND producto = ?"
+            params.append(producto)
 
         rows = self.db.ejecutar(query, tuple(params))
 

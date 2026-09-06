@@ -1,6 +1,7 @@
 """Tests para modules/core/db_manager.py"""
 
 import os
+import sqlite3
 import sys
 import tempfile
 
@@ -82,6 +83,39 @@ def _crear_tintura_con_hijos(db, tintura_id="T-TEST-0001"):
         "compuestos_detectados",
         {"registro_id": registro_id, "compuesto": "taninos"},
     )
+
+
+def test_migra_columna_producto_en_bd_preexistente_sin_perder_filas(tmp_path):
+    """Simula una BD creada antes de la Fase 2 (sin la columna producto),
+    como la instalación real del usuario con 7 tinturas ya guardadas."""
+    db_path = str(tmp_path / "vieja.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE tinturas (
+            id TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            grupo_funcional TEXT NOT NULL,
+            version TEXT DEFAULT '1.0.0',
+            peso_materia_seca_g REAL NOT NULL,
+            volumen_alcohol_ml REAL NOT NULL,
+            fecha_inicio TEXT NOT NULL,
+            estado TEXT DEFAULT 'en_maceracion'
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO tinturas (id, nombre, grupo_funcional, peso_materia_seca_g, "
+        "volumen_alcohol_ml, fecha_inicio) VALUES (?, ?, ?, ?, ?, ?)",
+        ("T-OLD-0001", "Amargos Viejo", "amargos_estructurales", 500, 2500, "2026-01-01"),
+    )
+    conn.commit()
+    conn.close()
+
+    db = DatabaseManager(db_path=db_path, schema_path=str(tmp_path / "schema" / "schema.sql"))
+
+    filas = db.ejecutar("SELECT id, nombre, producto FROM tinturas")
+    assert filas == [{"id": "T-OLD-0001", "nombre": "Amargos Viejo", "producto": "fernet"}]
 
 
 def test_eliminar_filas_retorna_cantidad_afectada(db):

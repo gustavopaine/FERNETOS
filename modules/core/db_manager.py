@@ -43,6 +43,23 @@ class DatabaseManager:
             # Verificar que las tablas existen
             self._verificar_esquema()
 
+        # Migraciones de columna: corre siempre, es idempotente (chequea
+        # antes de alterar) y cubre tanto instalaciones nuevas como una BD
+        # real creada antes de que existiera el producto Gancia.
+        self._migrar_columna_producto()
+
+    def _migrar_columna_producto(self):
+        """Agrega la columna 'producto' a tinturas si todavía no existe."""
+        with self.get_connection() as conn:
+            columnas = [
+                row[1] for row in conn.execute("PRAGMA table_info(tinturas)").fetchall()
+            ]
+            if "producto" not in columnas:
+                conn.execute(
+                    "ALTER TABLE tinturas ADD COLUMN producto TEXT NOT NULL DEFAULT 'fernet'"
+                )
+                conn.commit()
+
     def _crear_bd_desde_esquema(self):
         """Crea la BD desde el archivo de esquema"""
         if os.path.exists(self.schema_path):
@@ -66,6 +83,7 @@ class DatabaseManager:
         CREATE TABLE IF NOT EXISTS tinturas (
             id TEXT PRIMARY KEY,
             nombre TEXT NOT NULL,
+            producto TEXT NOT NULL DEFAULT 'fernet',
             grupo_funcional TEXT NOT NULL,
             version TEXT DEFAULT '1.0.0',
             peso_materia_seca_g REAL NOT NULL,
