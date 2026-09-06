@@ -15,6 +15,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from modules.tinturas.models import Tintura, GrupoFuncional
+from modules.ensamblaje.common import abv_resultante
 from config.settings import load_settings
 
 # Cargar configuración global
@@ -129,28 +130,19 @@ class FernetCalculator:
         Returns:
             float: ABV calculado
         """
-        # Volumen total sin azúcar
-        volumen_total = composicion.volumen_total_ml
-        if volumen_total == 0:
-            return 0.0
+        # Componentes que aportan alcohol: (volumen_ml, abv_pct). El agua no
+        # se incluye porque su ABV es 0 y no cambia la suma ponderada.
+        componentes = [(composicion.alcohol_base_ml, 96.0)]  # alcohol base
 
-        # Alcohol puro total
-        alcohol_puro = 0.0
-
-        # Aporte del alcohol base (asumimos 96% si no se especifica)
-        alcohol_puro += composicion.alcohol_base_ml * 0.96  # 96% ABV
-
-        # Aporte de las tinturas
         for tid, ml in composicion.tinturas.items():
             if tid in tinturas_data:
                 tintura = tinturas_data[tid]
-                alcohol_puro += ml * (tintura.parametros.abv_objetivo / 100)
+                componentes.append((ml, tintura.parametros.abv_objetivo))
             else:
                 # Si no tenemos datos, asumimos 70% (default para tinturas)
-                alcohol_puro += ml * 0.70
+                componentes.append((ml, 70.0))
 
-        # El agua no aporta alcohol
-        return (alcohol_puro / volumen_total) * 100
+        return abv_resultante(componentes, composicion.volumen_total_ml)
 
     @staticmethod
     def calcular_azucar(azucar_gpl: int, volumen_lote_ml: float) -> float:
