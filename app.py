@@ -1732,6 +1732,11 @@ elif menu == "🎯 Micromezclas":
                     tinturas_dict[tintura1_id] = float(ml1)
                 if ml2 > 0 and tintura2_id and tintura2_id != tintura1_id:
                     tinturas_dict[tintura2_id] = float(ml2)
+                elif ml2 > 0 and tintura2_id and tintura2_id == tintura1_id:
+                    st.warning(
+                        "⚠️ Tintura 2 es la misma que Tintura 1 - su volumen "
+                        "no se sumó. Elegí una tintura distinta en el slot 2."
+                    )
 
             if not tinturas_dict:
                 st.error("Selecciona al menos una tintura")
@@ -2222,6 +2227,11 @@ elif menu == "🎯 Micromezclas Gancia":
                     tinturas_dict_g[tintura1_id_g] = float(ml1_g)
                 if ml2_g > 0 and tintura2_id_g and tintura2_id_g != tintura1_id_g:
                     tinturas_dict_g[tintura2_id_g] = float(ml2_g)
+                elif ml2_g > 0 and tintura2_id_g and tintura2_id_g == tintura1_id_g:
+                    st.warning(
+                        "⚠️ Tintura 2 es la misma que Tintura 1 - su volumen "
+                        "no se sumó. Elegí una tintura distinta en el slot 2."
+                    )
 
             if not tinturas_dict_g:
                 st.error("Selecciona al menos una tintura")
@@ -2324,16 +2334,15 @@ elif menu == "🎯 Micromezclas Gancia":
                 if t:
                     opciones_ajuste_g[tid] = t.nombre
 
-            if not opciones_ajuste_g:
-                st.info("Este blend no tiene tinturas para ajustar")
-                tintura_ajuste_g = None
-            else:
-                tintura_ajuste_g = st.selectbox(
-                    "Tintura a ajustar",
-                    options=list(opciones_ajuste_g.keys()),
-                    format_func=lambda x: opciones_ajuste_g[x],
-                    key="ajuste_gancia_tintura",
-                )
+            # Añadir opción para nueva tintura (igual que Fernet)
+            opciones_ajuste_g["nueva"] = "➕ Añadir nueva tintura"
+
+            tintura_ajuste_g = st.selectbox(
+                "Tintura a ajustar",
+                options=list(opciones_ajuste_g.keys()),
+                format_func=lambda x: opciones_ajuste_g[x],
+                key="ajuste_gancia_tintura",
+            )
 
         with col_a2:
             incremento_g = st.number_input(
@@ -2356,8 +2365,8 @@ elif menu == "🎯 Micromezclas Gancia":
         if st.button(
             "✅ Aplicar Ajuste", use_container_width=True, key="ajuste_gancia_aplicar"
         ):
-            if not tintura_ajuste_g:
-                st.error("No hay tinturas para ajustar en este blend")
+            if tintura_ajuste_g == "nueva":
+                st.info("Funcionalidad de nueva tintura en desarrollo")
             else:
                 from copy import deepcopy
 
