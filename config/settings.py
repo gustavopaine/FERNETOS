@@ -80,6 +80,25 @@ class BackupSettings:
 
 
 @dataclass
+class GanciaParameterRanges:
+    """Rangos de parámetros técnicos por defecto para blends de Gancia"""
+
+    vino_pct_min: float = 0.75
+    vino_pct_max: float = 0.80
+    vino_pct_default: float = 0.78
+    vino_abv_default: float = 12.0
+    alcohol_fortificacion_abv_default: float = 96.0
+    abv_min: float = 15.0
+    abv_max: float = 18.0
+    abv_objetivo_default: float = 17.0
+    azucar_pct_min: float = 8.0
+    azucar_pct_max: float = 12.0
+    azucar_pct_default: float = 10.0
+    acido_citrico_default_g_l: float = 0.0
+    caramelo_default_ml: float = 0.0
+
+
+@dataclass
 class FernetOSConfig:
     """Configuración completa del sistema"""
 
@@ -89,6 +108,7 @@ class FernetOSConfig:
     curves: CurveSettings = field(default_factory=CurveSettings)
     sensory: SensorySettings = field(default_factory=SensorySettings)
     backup: BackupSettings = field(default_factory=BackupSettings)
+    gancia: GanciaParameterRanges = field(default_factory=GanciaParameterRanges)
 
     @classmethod
     def from_yaml(cls, yaml_path: str = "config/settings.yaml") -> "FernetOSConfig":
@@ -166,6 +186,21 @@ def save_settings(config: FernetOSConfig, yaml_path: str = "config/settings.yaml
             "auto_backup": config.backup.auto_backup,
             "frecuencia": config.backup.frecuencia,
             "ultimo_backup": config.backup.ultimo_backup,
+        },
+        "gancia": {
+            "vino_pct_min": config.gancia.vino_pct_min,
+            "vino_pct_max": config.gancia.vino_pct_max,
+            "vino_pct_default": config.gancia.vino_pct_default,
+            "vino_abv_default": config.gancia.vino_abv_default,
+            "alcohol_fortificacion_abv_default": config.gancia.alcohol_fortificacion_abv_default,
+            "abv_min": config.gancia.abv_min,
+            "abv_max": config.gancia.abv_max,
+            "abv_objetivo_default": config.gancia.abv_objetivo_default,
+            "azucar_pct_min": config.gancia.azucar_pct_min,
+            "azucar_pct_max": config.gancia.azucar_pct_max,
+            "azucar_pct_default": config.gancia.azucar_pct_default,
+            "acido_citrico_default_g_l": config.gancia.acido_citrico_default_g_l,
+            "caramelo_default_ml": config.gancia.caramelo_default_ml,
         },
     }
 

@@ -6,6 +6,20 @@ curves:
   optimal_threshold: 2.0
   overextraction_warning_days: 3
   sampling_frequency_days: 2
+gancia:
+  vino_pct_min: 0.75
+  vino_pct_max: 0.80
+  vino_pct_default: 0.78
+  vino_abv_default: 12.0
+  alcohol_fortificacion_abv_default: 96.0
+  abv_min: 15.0
+  abv_max: 18.0
+  abv_objetivo_default: 17.0
+  azucar_pct_min: 8.0
+  azucar_pct_max: 12.0
+  azucar_pct_default: 10.0
+  acido_citrico_default_g_l: 0.0
+  caramelo_default_ml: 0.0
 parameters:
   abv_default: 40.0
   abv_max: 42.0
