@@ -32,7 +32,7 @@ son los elementos concretos que decidí incluir bajo ese paraguas):
   "auto backup" sin efecto real sería entregar el mismo espejismo con otro nombre.
 - **[added] Suite de tests real (pytest, con asserts) contra `repository_sql.py`**
   en vez de los scripts de impresión actuales. Costo: medio — es el ítem más
-  grande del spec. Por qright: fue decisión explícita tuya (TDD para lógica de
+  grande del spec. Por qué: fue decisión explícita tuya (TDD para lógica de
   negocio) y es la única forma de detectar si un cambio futuro (incluyendo Fase 2
   con Gancia) rompe el cálculo de blends o la integridad de la base de datos.
 - **[added] Poblar `utils/validators.py`** (vacío hoy) con validaciones mínimas

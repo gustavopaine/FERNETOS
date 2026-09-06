@@ -24,13 +24,25 @@ def test_composicion_vacia_no_lanza():
     validar_composicion_botanica([])
 
 
-def test_composicion_con_tolerancia_de_redondeo_no_lanza():
+@pytest.mark.parametrize("total", [99.6, 100.4])
+def test_composicion_dentro_de_tolerancia_no_lanza(total):
+    """total dista de 100 en 0.4, dentro de PORCENTAJE_TOLERANCIA (0.5)."""
     composicion = [
-        ComposicionBotanica(especie="genciana", porcentaje=33.34, parte_utilizada="raiz"),
-        ComposicionBotanica(especie="ruibarbo", porcentaje=33.33, parte_utilizada="raiz"),
-        ComposicionBotanica(especie="quina", porcentaje=33.33, parte_utilizada="corteza"),
+        ComposicionBotanica(especie="genciana", porcentaje=total - 50, parte_utilizada="raiz"),
+        ComposicionBotanica(especie="ruibarbo", porcentaje=50, parte_utilizada="raiz"),
     ]
     validar_composicion_botanica(composicion)
+
+
+@pytest.mark.parametrize("total", [99.4, 100.6])
+def test_composicion_fuera_de_tolerancia_lanza(total):
+    """total dista de 100 en 0.6, fuera de PORCENTAJE_TOLERANCIA (0.5)."""
+    composicion = [
+        ComposicionBotanica(especie="genciana", porcentaje=total - 50, parte_utilizada="raiz"),
+        ComposicionBotanica(especie="ruibarbo", porcentaje=50, parte_utilizada="raiz"),
+    ]
+    with pytest.raises(ValueError):
+        validar_composicion_botanica(composicion)
 
 
 def test_composicion_que_no_suma_100_lanza():

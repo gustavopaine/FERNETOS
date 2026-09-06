@@ -84,15 +84,19 @@ class FernetOS:
         )
 
         # Crear tintura
-        tintura = Tintura(
-            nombre=args.nombre,
-            grupo_funcional=grupo,
-            composicion=composicion,
-            peso_total_materia_seca_g=args.peso_g,
-            volumen_alcohol_ml=args.volumen_ml,
-            parametros=parametros,
-            observaciones_iniciales=args.observaciones,
-        )
+        try:
+            tintura = Tintura(
+                nombre=args.nombre,
+                grupo_funcional=grupo,
+                composicion=composicion,
+                peso_total_materia_seca_g=args.peso_g,
+                volumen_alcohol_ml=args.volumen_ml,
+                parametros=parametros,
+                observaciones_iniciales=args.observaciones,
+            )
+        except ValueError as e:
+            print(f"❌ Composición o parámetros inválidos: {e}")
+            return None
 
         # Guardar
         self.tinturas_repo.guardar(tintura)
@@ -243,7 +247,7 @@ class FernetOS:
             help="Grupo funcional",
         )
         parser_tintura.add_argument(
-            "--composicion", help="Composición (ej: genciana:60,ruibarbo:30)"
+            "--composicion", help="Composición (ej: genciana:60,ruibarbo:40)"
         )
         parser_tintura.add_argument(
             "--parte", default="raiz", help="Parte de la planta"

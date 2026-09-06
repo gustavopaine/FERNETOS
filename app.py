@@ -38,10 +38,15 @@ def _verificar_backup_automatico(db):
     """
     from config.settings import load_settings, save_settings, backup_es_necesario
 
-    if not os.path.exists(db.db_path):
-        return  # BD recién creada, nada que respaldar todavía
-
     try:
+        # DatabaseManager() ya crea el archivo .db si no existía (con las
+        # tablas vacías) antes de llegar acá, así que comprobar sólo la
+        # existencia del archivo nunca evita el backup en una instalación
+        # nueva. Lo que realmente queremos evitar es respaldar una BD vacía.
+        conteo = db.ejecutar("SELECT COUNT(*) as total FROM tinturas")
+        if not conteo or conteo[0]["total"] == 0:
+            return
+
         cfg = load_settings()
         ahora = datetime.now()
         if backup_es_necesario(cfg.backup, ahora):
