@@ -137,7 +137,7 @@ def get_grupo_color(grupo):
         "botanicos_aromaticos": "#bcbd22",  # oliva
         "citricos_amargos": "#e377c2",  # rosa
         "especiado_suave": "#8c9eff",  # lavanda
-        "raices_aromaticas": "#2ca02c",  # verde
+        "raices_aromaticas": "#556b2f",  # verde oliva oscuro
         "amaderados": "#a0522d",  # marrón madera
         "colorantes_naturales": "#c71585",  # magenta (hibisco)
         "experimental": "#8c564b",  # marrón

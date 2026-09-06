@@ -20,10 +20,13 @@ from modules.tinturas.models import ComposicionBotanica, ControlCalidad
 
 
 def _ingrediente(especie, gramos, parte="raiz"):
-    # porcentaje no aplica acá (la receta se define en gramos absolutos,
-    # no en % de materia seca) - se deja en 0, ComposicionBotanica no lo
-    # exige distinto de cero.
-    return ComposicionBotanica(especie=especie, porcentaje=gramos, parte_utilizada=parte)
+    # La receta de Campari se define en cantidades absolutas (gramos, o
+    # unidades para las cáscaras), no en % de materia seca - se usa el
+    # campo gramos dedicado en vez de forzarlo en porcentaje (que por
+    # contrato de ComposicionBotanica es 0-100%, otra unidad distinta).
+    return ComposicionBotanica(
+        especie=especie, porcentaje=0.0, parte_utilizada=parte, gramos=gramos
+    )
 
 
 def _composicion_base():
@@ -39,9 +42,12 @@ def _composicion_base():
             _ingrediente("angelica", 5, "raiz"),
             _ingrediente("ruibarbo", 2, "raiz"),
             _ingrediente("chips_de_roble", 5, "madera"),
-            ComposicionBotanica(especie="naranja", porcentaje=1, parte_utilizada="cascara"),
-            ComposicionBotanica(especie="pomelo", porcentaje=1, parte_utilizada="cascara"),
-            ComposicionBotanica(especie="limon", porcentaje=1, parte_utilizada="cascara"),
+            # Cáscaras: gramos acá representa "1 unidad" (cáscara entera),
+            # no gramos de peso - ComposicionBotanica no distingue unidad
+            # de medida todavía.
+            _ingrediente("naranja", 1, "cascara"),
+            _ingrediente("pomelo", 1, "cascara"),
+            _ingrediente("limon", 1, "cascara"),
         ],
         ingredientes_incorporacion_tardia=[
             _ingrediente("hibiscus", 10, "flor"),
@@ -112,3 +118,14 @@ def test_calcular_blend_arma_resultado_completo():
     assert resultado.abv_calculado == pytest.approx(26.7, abs=0.05)
     assert resultado.azucar_efectiva_gpl == pytest.approx(150.0)
     assert resultado.composicion is composicion
+
+
+def test_ingredientes_usan_gramos_no_porcentaje():
+    """Regresión: cantidades absolutas van en el campo gramos dedicado,
+    no forzadas dentro de porcentaje (que por contrato es 0-100%)."""
+    composicion = _composicion_base()
+    ajenjo = next(
+        i for i in composicion.ingredientes_maceracion if i.especie == "ajenjo"
+    )
+    assert ajenjo.gramos == 10
+    assert ajenjo.porcentaje == 0.0

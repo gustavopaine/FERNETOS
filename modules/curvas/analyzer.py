@@ -224,26 +224,32 @@ class CurveAnalyzer:
 
         ultimo_registro = max(self.registros, key=lambda r: r.dia)
 
-        # Heurística según grupo
+        # Heurística según grupo. Varios grupos se comparten entre
+        # productos (AMARGOS_ESTRUCTURALES con Campari, CITRICOS_AMARGOS
+        # con Campari) - las heurísticas de acá abajo están tuneadas
+        # específicamente para Fernet, así que además de chequear el
+        # grupo hay que exigir producto == FERNET para no aplicarle por
+        # error el timing de Fernet a una tintura de otro producto.
         grupo = self.tintura.grupo_funcional
+        es_fernet = self.tintura.producto == Producto.FERNET
 
-        if grupo == GrupoFuncional.AMARGOS_ESTRUCTURALES:
+        if es_fernet and grupo == GrupoFuncional.AMARGOS_ESTRUCTURALES:
             # Amargos: entre 16-21 días, preferible antes si ya hay intensidad suficiente
             if ultimo_registro.intensidad_estimada > 80 and ultimo_registro.dia >= 16:
                 return ultimo_registro.dia
             return min(21, ultimo_registro.dia + 2)
 
-        elif grupo == GrupoFuncional.AROMATICA_ALTA:
+        elif es_fernet and grupo == GrupoFuncional.AROMATICA_ALTA:
             # Aromáticos: máximo 7 días
             return min(7, ultimo_registro.dia)
 
-        elif grupo == GrupoFuncional.ESPECIAS_CALIDAS:
+        elif es_fernet and grupo == GrupoFuncional.ESPECIAS_CALIDAS:
             # Especias: 14-18 días
             if ultimo_registro.dia >= 14:
                 return ultimo_registro.dia
             return 14
 
-        elif grupo == GrupoFuncional.CITRICOS:
+        elif es_fernet and grupo == GrupoFuncional.CITRICOS:
             # Cítricos: 5-7 días
             return min(7, ultimo_registro.dia + 1)
 

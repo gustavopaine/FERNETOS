@@ -106,6 +106,11 @@ class ComposicionBotanica:
     porcentaje: float  # Porcentaje sobre el total de materia seca (0-100)
     parte_utilizada: str  # "raiz", "corteza", "hoja", "flor", "semilla", "cascara"
     lote_origen: Optional[str] = None  # Para trazabilidad
+    # Recetas que se definen en cantidades absolutas (ej. Campari: "10g de
+    # ajenjo") en vez de porcentaje relativo del total - usar gramos y
+    # dejar porcentaje=0.0 en ese caso, para no mezclar las dos unidades
+    # en el mismo campo.
+    gramos: Optional[float] = None
 
     def to_dict(self) -> Dict:
         return {
@@ -113,6 +118,7 @@ class ComposicionBotanica:
             "porcentaje": self.porcentaje,
             "parte_utilizada": self.parte_utilizada,
             "lote_origen": self.lote_origen,
+            "gramos": self.gramos,
         }
 
 
