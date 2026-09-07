@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 
 from modules.core.db_manager import DatabaseManager
-from modules.tinturas.models import (
+from core.tintura_models import (
+    CompatibilidadFamilia,
     ComposicionBotanica,
     EstadoTintura,
     GrupoFuncional,
@@ -20,7 +21,7 @@ from modules.tinturas.models import (
     RegistroExtraccion,
     Tintura,
 )
-from modules.tinturas.repository_sql import TinturaSQLRepository
+from core.tintura_repository import TinturaSQLRepository
 
 
 @pytest.fixture
@@ -132,6 +133,36 @@ def test_listar_filtra_por_producto(repo):
     assert [t.id for t in solo_fernet] == [fernet.id]
 
 
+def test_guardar_y_recuperar_compatibilidad_familias(repo):
+    tintura = _tintura_amargos()
+    tintura.compatibilidad_familias = [
+        CompatibilidadFamilia(
+            familia="americano", dosis_min_ml_l=5.0, dosis_max_ml_l=15.0, notas="prueba"
+        ),
+        CompatibilidadFamilia(familia="campari", dosis_min_ml_l=2.0, dosis_max_ml_l=8.0),
+    ]
+
+    repo.guardar(tintura)
+    recuperada = repo.get_by_id(tintura.id)
+
+    assert len(recuperada.compatibilidad_familias) == 2
+    por_familia = {c.familia: c for c in recuperada.compatibilidad_familias}
+    assert por_familia["americano"].dosis_min_ml_l == 5.0
+    assert por_familia["americano"].dosis_max_ml_l == 15.0
+    assert por_familia["americano"].notas == "prueba"
+    assert por_familia["campari"].dosis_min_ml_l == 2.0
+    assert por_familia["campari"].dosis_max_ml_l == 8.0
+
+
+def test_guardar_sin_compatibilidad_familias_devuelve_lista_vacia(repo):
+    tintura = _tintura_amargos()
+
+    repo.guardar(tintura)
+    recuperada = repo.get_by_id(tintura.id)
+
+    assert recuperada.compatibilidad_familias == []
+
+
 def test_eliminar_borra_tintura_y_no_deja_huerfanos(repo):
     tintura = _tintura_amargos()
     tintura.agregar_registro_extraccion(
@@ -143,11 +174,17 @@ def test_eliminar_borra_tintura_y_no_deja_huerfanos(repo):
             compuestos_detectados=["glucosidos"],
         )
     )
+    tintura.compatibilidad_familias = [
+        CompatibilidadFamilia(familia="americano", dosis_min_ml_l=5.0, dosis_max_ml_l=15.0)
+    ]
     repo.guardar(tintura)
 
     assert repo.eliminar(tintura.id) is True
 
     assert repo.get_by_id(tintura.id) is None
+    assert repo.db.ejecutar(
+        "SELECT * FROM compatibilidad_familias WHERE tintura_id = ?", (tintura.id,)
+    ) == []
     assert repo.db.ejecutar(
         "SELECT * FROM composicion_botanica WHERE tintura_id = ?", (tintura.id,)
     ) == []

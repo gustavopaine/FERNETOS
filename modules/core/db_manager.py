@@ -43,10 +43,13 @@ class DatabaseManager:
             # Verificar que las tablas existen
             self._verificar_esquema()
 
-        # Migraciones de columna: corre siempre, es idempotente (chequea
-        # antes de alterar) y cubre tanto instalaciones nuevas como una BD
-        # real creada antes de que existiera el producto Gancia.
+        # Migraciones de columna/tabla: corren siempre, son idempotentes
+        # (chequean antes de alterar/crear) y cubren tanto instalaciones
+        # nuevas como una BD real creada antes de que existiera el
+        # producto Gancia, la tabla compatibilidad_familias o recetas.
         self._migrar_columna_producto()
+        self._migrar_tabla_compatibilidad_familias()
+        self._migrar_tabla_recetas()
 
     def _migrar_columna_producto(self):
         """Agrega la columna 'producto' a tinturas si todavía no existe."""
@@ -59,6 +62,54 @@ class DatabaseManager:
                     "ALTER TABLE tinturas ADD COLUMN producto TEXT NOT NULL DEFAULT 'fernet'"
                 )
                 conn.commit()
+
+    def _migrar_tabla_compatibilidad_familias(self):
+        """Crea la tabla 'compatibilidad_familias' si todavía no existe."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS compatibilidad_familias (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tintura_id TEXT NOT NULL,
+                    familia TEXT NOT NULL,
+                    dosis_min_ml_l REAL,
+                    dosis_max_ml_l REAL,
+                    notas TEXT,
+                    UNIQUE(tintura_id, familia),
+                    FOREIGN KEY (tintura_id) REFERENCES tinturas(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_compat_familias_tintura "
+                "ON compatibilidad_familias(tintura_id)"
+            )
+            conn.commit()
+
+    def _migrar_tabla_recetas(self):
+        """Crea la tabla 'recetas' si todavía no existe."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS recetas (
+                    id TEXT PRIMARY KEY,
+                    familia TEXT NOT NULL,
+                    nombre TEXT NOT NULL,
+                    version TEXT DEFAULT '1.0.0',
+                    estado TEXT NOT NULL DEFAULT 'borrador',
+                    ingredientes_json TEXT NOT NULL DEFAULT '[]',
+                    abv_objetivo REAL,
+                    tiempo_maceracion_dias INTEGER,
+                    perfil_sensorial_json TEXT DEFAULT '{}',
+                    notas_batch TEXT,
+                    fecha_creacion TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia)"
+            )
+            conn.commit()
 
     def _crear_bd_desde_esquema(self):
         """Crea la BD desde el archivo de esquema"""
@@ -144,11 +195,38 @@ class DatabaseManager:
             PRIMARY KEY (registro_id, compuesto),
             FOREIGN KEY (registro_id) REFERENCES registros_curva(id) ON DELETE CASCADE
         );
-        
+
+        CREATE TABLE IF NOT EXISTS compatibilidad_familias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tintura_id TEXT NOT NULL,
+            familia TEXT NOT NULL,
+            dosis_min_ml_l REAL,
+            dosis_max_ml_l REAL,
+            notas TEXT,
+            UNIQUE(tintura_id, familia),
+            FOREIGN KEY (tintura_id) REFERENCES tinturas(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS recetas (
+            id TEXT PRIMARY KEY,
+            familia TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            version TEXT DEFAULT '1.0.0',
+            estado TEXT NOT NULL DEFAULT 'borrador',
+            ingredientes_json TEXT NOT NULL DEFAULT '[]',
+            abv_objetivo REAL,
+            tiempo_maceracion_dias INTEGER,
+            perfil_sensorial_json TEXT DEFAULT '{}',
+            notas_batch TEXT,
+            fecha_creacion TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
         -- Índices
         CREATE INDEX IF NOT EXISTS idx_tinturas_estado ON tinturas(estado);
         CREATE INDEX IF NOT EXISTS idx_tinturas_grupo ON tinturas(grupo_funcional);
         CREATE INDEX IF NOT EXISTS idx_registros_tintura ON registros_curva(tintura_id);
+        CREATE INDEX IF NOT EXISTS idx_compat_familias_tintura ON compatibilidad_familias(tintura_id);
+        CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia);
         """
 
         with self.get_connection() as conn:

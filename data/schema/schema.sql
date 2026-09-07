@@ -66,9 +66,35 @@
             PRIMARY KEY (registro_id, compuesto),
             FOREIGN KEY (registro_id) REFERENCES registros_curva(id) ON DELETE CASCADE
         );
-        
+
+        CREATE TABLE IF NOT EXISTS compatibilidad_familias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tintura_id TEXT NOT NULL,
+            familia TEXT NOT NULL,
+            dosis_min_ml_l REAL,
+            dosis_max_ml_l REAL,
+            notas TEXT,
+            UNIQUE(tintura_id, familia),
+            FOREIGN KEY (tintura_id) REFERENCES tinturas(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS recetas (
+            id TEXT PRIMARY KEY,
+            familia TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            version TEXT DEFAULT '1.0.0',
+            estado TEXT NOT NULL DEFAULT 'borrador',
+            ingredientes_json TEXT NOT NULL DEFAULT '[]',
+            abv_objetivo REAL,
+            tiempo_maceracion_dias INTEGER,
+            perfil_sensorial_json TEXT DEFAULT '{}',
+            notas_batch TEXT,
+            fecha_creacion TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
         -- Índices
         CREATE INDEX IF NOT EXISTS idx_tinturas_estado ON tinturas(estado);
         CREATE INDEX IF NOT EXISTS idx_tinturas_grupo ON tinturas(grupo_funcional);
         CREATE INDEX IF NOT EXISTS idx_registros_tintura ON registros_curva(tintura_id);
-        
+        CREATE INDEX IF NOT EXISTS idx_compat_familias_tintura ON compatibilidad_familias(tintura_id);
+        CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia);

@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from modules.core.db_manager import DatabaseManager
-from modules.tinturas.repository_sql import TinturaSQLRepository
+from core.tintura_repository import TinturaSQLRepository
 
 
 def limpiar_duplicados():

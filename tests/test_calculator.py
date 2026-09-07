@@ -7,12 +7,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.ensamblaje.calculator import (
+from families.fernet.calculator import (
     BlendParams,
     ComposicionBlend,
     FernetCalculator,
 )
-from modules.tinturas.models import ParametrosExtraccion, Tintura
+from core.tintura_models import ParametrosExtraccion, Tintura
 
 
 @pytest.fixture

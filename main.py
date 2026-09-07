@@ -13,16 +13,17 @@ from typing import Dict, Any
 # Asegurar que podemos importar módulos
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from modules.tinturas.models import (
+from core.tintura_models import (
     Tintura,
     GrupoFuncional,
     ComposicionBotanica,
     ParametrosExtraccion,
 )
 from modules.core.db_manager import DatabaseManager
-from modules.tinturas.repository_sql import TinturaSQLRepository
-from modules.curvas.analyzer import CurveAnalyzer, CurveVisualizer
-from modules.ensamblaje.calculator import FernetCalculator, BlendParams
+from core.tintura_repository import TinturaSQLRepository
+from core.curve_analysis import CurveAnalyzer
+from core.curve_visualizer import CurveVisualizer
+from families.fernet.calculator import FernetCalculator, BlendParams
 from modules.microblending.pilot_batch import PilotBatch
 from modules.microblending.ab_testing import ABTesting
 from config.settings import load_settings, FernetOSConfig
@@ -116,7 +117,7 @@ class FernetOS:
             print(f"❌ Tintura {args.tintura_id} no encontrada")
             return
 
-        from modules.tinturas.models import RegistroExtraccion
+        from core.tintura_models import RegistroExtraccion
 
         registro = RegistroExtraccion(
             dia=args.dia,

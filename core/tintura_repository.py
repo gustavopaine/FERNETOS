@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import json
 
-from modules.tinturas.models import (
+from core.tintura_models import (
     Tintura,
     GrupoFuncional,
     ComposicionBotanica,
@@ -16,6 +16,7 @@ from modules.tinturas.models import (
     RegistroExtraccion,
     EstadoTintura,
     ControlCalidad,
+    CompatibilidadFamilia,
 )
 from modules.core.db_manager import DatabaseManager
 
@@ -103,11 +104,30 @@ class TinturaSQLRepository:
                 "lote_origen": comp.lote_origen,
             }
             query = """
-            INSERT INTO composicion_botanica 
+            INSERT INTO composicion_botanica
             (tintura_id, especie, porcentaje, parte_utilizada, lote_origen)
             VALUES (?, ?, ?, ?, ?)
             """
             self.db.ejecutar(query, tuple(comp_data.values()))
+
+        # Guardar compatibilidad con otras familias
+        self.db.ejecutar(
+            "DELETE FROM compatibilidad_familias WHERE tintura_id = ?", (tintura.id,)
+        )
+        for compat in tintura.compatibilidad_familias:
+            compat_data = {
+                "tintura_id": tintura.id,
+                "familia": compat.familia,
+                "dosis_min_ml_l": compat.dosis_min_ml_l,
+                "dosis_max_ml_l": compat.dosis_max_ml_l,
+                "notas": compat.notas,
+            }
+            query = """
+            INSERT INTO compatibilidad_familias
+            (tintura_id, familia, dosis_min_ml_l, dosis_max_ml_l, notas)
+            VALUES (?, ?, ?, ?, ?)
+            """
+            self.db.ejecutar(query, tuple(compat_data.values()))
 
         # Guardar parámetros de extracción
         if tintura.parametros:
@@ -125,7 +145,7 @@ class TinturaSQLRepository:
                 "recipiente_material": tintura.parametros.recipiente_material,
             }
             query = """
-            INSERT INTO parametros_extraccion 
+            INSERT INTO parametros_extraccion
             (tintura_id, abv_objetivo, ratio_planta_alcohol, temperatura_maceracion,
              agitacion_diaria, tiempo_estimado_dias, proteccion_luz, recipiente_material)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -279,6 +299,20 @@ class TinturaSQLRepository:
                 lote_origen=row["lote_origen"],
             )
             tintura.composicion.append(comp)
+
+        # Cargar compatibilidad con otras familias
+        query = "SELECT * FROM compatibilidad_familias WHERE tintura_id = ?"
+        compat_rows = self.db.ejecutar(query, (tintura_id,))
+
+        for row in compat_rows:
+            tintura.compatibilidad_familias.append(
+                CompatibilidadFamilia(
+                    familia=row["familia"],
+                    dosis_min_ml_l=row["dosis_min_ml_l"],
+                    dosis_max_ml_l=row["dosis_max_ml_l"],
+                    notas=row["notas"] or "",
+                )
+            )
 
         # Cargar registros de curva
         query = """

@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.ensamblaje.common import abv_resultante, alcohol_puro_total
+from core.blend_math import abv_resultante, alcohol_puro_total
 
 
 def test_alcohol_puro_total_un_componente():

@@ -7,12 +7,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.ensamblaje.calculator_gancia import (
+from families.gancia.gancia_calculator import (
     ComposicionBlendGancia,
     GanciaBlendParams,
     GanciaCalculator,
 )
-from modules.tinturas.models import ParametrosExtraccion, Producto, Tintura
+from core.tintura_models import ParametrosExtraccion, Producto, Tintura
 
 
 @pytest.fixture

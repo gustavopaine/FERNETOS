@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.ensamblaje.calculator import BlendParams, FernetCalculator
+from families.fernet.calculator import BlendParams, FernetCalculator
 from modules.microblending.pilot_batch import PilotBatch
 
 

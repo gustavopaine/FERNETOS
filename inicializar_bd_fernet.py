@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from modules.core.db_manager import DatabaseManager
-from modules.tinturas.repository_sql import TinturaSQLRepository
-from modules.tinturas.models import (
+from core.tintura_repository import TinturaSQLRepository
+from core.tintura_models import (
     Tintura,
     GrupoFuncional,
     ComposicionBotanica,

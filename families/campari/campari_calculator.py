@@ -1,9 +1,9 @@
 """
 Motor de cálculo para Campari casero: receta real de referencia (batch de
 1.5L), cuarto producto del sistema (Fernet, Gancia, Americano, Campari).
-Estructura paralela a calculator_americano.py (infusión directa: alcohol
-+ agua, sin base vínica) - comparten únicamente el balance de alcohol
-puro vía modules.ensamblaje.common, no una clase base.
+Estructura paralela a families/gancia/americano_calculator.py (infusión
+directa: alcohol + agua, sin base vínica) - comparten únicamente el
+balance de alcohol puro vía core.blend_math, no una clase base.
 
 A diferencia de Americano, esta receta no tiene capa de variantes
 experimentales todavía: es la receta base con cantidades exactas.
@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
-from modules.tinturas.models import ComposicionBotanica, ControlCalidad
-from modules.ensamblaje.common import abv_resultante
+from core.tintura_models import ComposicionBotanica, ControlCalidad
+from core.blend_math import abv_resultante
 
 
 @dataclass

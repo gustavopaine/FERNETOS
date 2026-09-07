@@ -68,9 +68,9 @@ def init_system():
     """Inicializa los componentes del sistema (cacheado)"""
     try:
         from modules.core.db_manager import DatabaseManager
-        from modules.tinturas.repository_sql import TinturaSQLRepository
-        from modules.ensamblaje.calculator import FernetCalculator
-        from modules.curvas.analyzer import CurveVisualizer
+        from core.tintura_repository import TinturaSQLRepository
+        from families.fernet.calculator import FernetCalculator
+        from core.curve_visualizer import CurveVisualizer
         from modules.microblending.ab_testing import ABTesting
 
         # Crear directorios necesarios
@@ -301,7 +301,7 @@ elif menu == "🧪 Tinturas":
         st.subheader("Tinturas Registradas")
 
         # Filtros
-        from modules.tinturas.models import Producto, grupos_disponibles_para
+        from core.tintura_models import Producto, grupos_disponibles_para
 
         col0, col1, col2, col3 = st.columns(4)
         with col0:
@@ -433,7 +433,7 @@ elif menu == "🧪 Tinturas":
     with tab2:
         st.subheader("Crear Nueva Tintura")
 
-        from modules.tinturas.models import (
+        from core.tintura_models import (
             Tintura,
             GrupoFuncional,
             ComposicionBotanica,
@@ -761,7 +761,7 @@ elif menu == "📈 Curvas de Extracción":
 
                     if submitted:
                         from datetime import datetime
-                        from modules.tinturas.models import RegistroExtraccion
+                        from core.tintura_models import RegistroExtraccion
 
                         registro = RegistroExtraccion(
                             dia=dia,
@@ -785,7 +785,7 @@ elif menu == "📈 Curvas de Extracción":
             t = repo.get_by_id(selected_id)
 
             if t and t.registros_extraccion:
-                from modules.curvas.analyzer import CurveAnalyzer
+                from core.curve_analysis import CurveAnalyzer
 
                 analyzer = CurveAnalyzer(t)
                 analisis = analyzer.analizar_completo()
@@ -954,7 +954,7 @@ elif menu == "📈 Curvas de Extracción":
                 # Botón para generar gráfico
                 if st.button("📥 Descargar gráfico", use_container_width=True):
                     try:
-                        from modules.curvas.analyzer import CurveVisualizer
+                        from core.curve_visualizer import CurveVisualizer
 
                         visualizer = CurveVisualizer()
                         filepath = visualizer.generar_grafico(
@@ -1008,7 +1008,7 @@ elif menu == "🧮 Ensamblaje":
         st.error("Error: Componentes no disponibles")
         st.stop()
 
-    from modules.ensamblaje.calculator import BlendParams
+    from families.fernet.calculator import BlendParams
 
     tabs = st.tabs(["🧪 Nuevo Blend", "📋 Historial", "📊 Análisis"])
 
@@ -1358,12 +1358,12 @@ elif menu == "🍷 Ensamblaje Gancia":
         st.error("Error: Repositorio no disponible")
         st.stop()
 
-    from modules.ensamblaje.calculator_gancia import (
+    from families.gancia.gancia_calculator import (
         ComposicionBlendGancia,
         GanciaBlendParams,
         GanciaCalculator,
     )
-    from modules.tinturas.models import Producto
+    from core.tintura_models import Producto
 
     gancia_calculator = GanciaCalculator()
 
@@ -1718,7 +1718,7 @@ elif menu == "🎯 Micromezclas":
             "🚀 Iniciar Microblending", type="primary", use_container_width=True
         ):
             # Crear blend base simplificado
-            from modules.ensamblaje.calculator import BlendParams
+            from families.fernet.calculator import BlendParams
 
             params = BlendParams(
                 volumen_objetivo_litros=volumen_base,
@@ -2089,13 +2089,13 @@ elif menu == "🎯 Micromezclas Gancia":
         st.error("Error: Repositorio no disponible")
         st.stop()
 
-    from modules.ensamblaje.calculator_gancia import (
+    from families.gancia.gancia_calculator import (
         ComposicionBlendGancia,
         GanciaBlendParams,
         GanciaBlendResult,
         GanciaCalculator,
     )
-    from modules.tinturas.models import Producto
+    from core.tintura_models import Producto
 
     gancia_calculator_micro = GanciaCalculator()
 
@@ -3818,7 +3818,7 @@ elif menu == "📦 Stock":
         st.divider()
 
         # Filtros
-        from modules.tinturas.models import Producto, grupos_disponibles_para
+        from core.tintura_models import Producto, grupos_disponibles_para
 
         col_f0, col_f1, col_f2, col_f3 = st.columns(4)
 
@@ -4059,7 +4059,7 @@ elif menu == "📦 Stock":
                     if t_sel3:
                         t = repo.get_by_id(t_sel3)
                         if t:
-                            from modules.tinturas.models import EstadoTintura
+                            from core.tintura_models import EstadoTintura
 
                             t.estado = EstadoTintura.AGOTADA
                             t.volumen_disponible_ml = 0

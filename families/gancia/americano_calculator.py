@@ -1,9 +1,9 @@
 """
 Motor de cálculo para Americano (ex-Gancia casero): receta real de
 infusión directa (alcohol + agua + botánicos macerando juntos en un solo
-lote), distinta de la base vínica de calculator_gancia.py. Estructura
+lote), distinta de la base vínica de gancia_calculator.py. Estructura
 paralela, sin heredar de GanciaCalculator - comparten únicamente el
-balance de alcohol puro vía modules.ensamblaje.common.
+balance de alcohol puro vía core.blend_math.
 
 Capa de extensibilidad para variantes experimentales: la receta base
 (genciana, melisa, canela, anís estrellado, angélica, enebro, cítricos)
@@ -17,9 +17,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
-from modules.tinturas.models import ComposicionBotanica
-from modules.ensamblaje.common import abv_resultante
-from modules.ensamblaje.calculator_gancia import GanciaCalculator
+from core.tintura_models import ComposicionBotanica
+from core.blend_math import abv_resultante
+from families.gancia.gancia_calculator import GanciaCalculator
 
 # Banco de botánicos. No se superponen entre sí (ver test dedicado) para
 # que no haya ambigüedad sobre qué lista protege a cada ingrediente.

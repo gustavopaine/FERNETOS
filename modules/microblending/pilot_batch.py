@@ -15,13 +15,13 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from modules.ensamblaje.calculator import (
+from families.fernet.calculator import (
     FernetCalculator,
     BlendResult,
     BlendParams,
     ComposicionBlend,
 )
-from modules.tinturas.models import Tintura
+from core.tintura_models import Tintura
 from modules.sensory.models import EvaluacionSensorial
 
 

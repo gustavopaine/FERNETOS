@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-# M�dulo inicializado
+# Módulo inicializado
 
-from modules.curvas.analyzer import CurveAnalyzer, CurveVisualizer, HistoricalCurveDB
+from core.curve_analysis import CurveAnalyzer
+from core.curve_visualizer import CurveVisualizer, HistoricalCurveDB
 
 __all__ = ["CurveAnalyzer", "CurveVisualizer", "HistoricalCurveDB"]

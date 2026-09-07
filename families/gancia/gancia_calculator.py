@@ -3,7 +3,7 @@ Motor de cálculo para ensamblaje de Gancia.
 Base vínica real (vino + fortificación con alcohol neutro), estructura
 paralela a FernetCalculator pero sin heredar de él: los parámetros no
 comparten forma (vino+fortificación vs alcohol+agua). Comparten únicamente
-el balance de alcohol puro, vía modules.ensamblaje.common.
+el balance de alcohol puro, vía core.blend_math.
 """
 
 from dataclasses import dataclass, field
@@ -11,8 +11,8 @@ from typing import Dict, Tuple
 from datetime import datetime
 import uuid
 
-from modules.tinturas.models import Tintura
-from modules.ensamblaje.common import abv_resultante
+from core.tintura_models import Tintura
+from core.blend_math import abv_resultante
 
 
 @dataclass

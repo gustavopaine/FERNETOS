@@ -7,15 +7,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 import copy
-import json
-import os
-import sys
 
-# Ajuste de ruta para importaciones
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-from modules.tinturas.models import Tintura, GrupoFuncional
-from modules.ensamblaje.common import abv_resultante
+from core.tintura_models import Tintura, GrupoFuncional
+from core.blend_math import abv_resultante
 from config.settings import load_settings
 
 # Cargar configuración global

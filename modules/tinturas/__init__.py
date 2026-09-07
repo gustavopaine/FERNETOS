@@ -1,10 +1,10 @@
-from modules.tinturas.models import (
+from core.tintura_models import (
     Tintura,
     GrupoFuncional,
     ComposicionBotanica,
     EstadoTintura,
 )
-from modules.tinturas.repository_sql import TinturaSQLRepository
+from core.tintura_repository import TinturaSQLRepository
 
 __all__ = [
     "Tintura",

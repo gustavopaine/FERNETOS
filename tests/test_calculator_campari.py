@@ -12,11 +12,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.ensamblaje.calculator_campari import (
+from families.campari.campari_calculator import (
     CampariCalculator,
     ComposicionCampari,
 )
-from modules.tinturas.models import ComposicionBotanica, ControlCalidad
+from core.tintura_models import ComposicionBotanica, ControlCalidad
 
 
 def _ingrediente(especie, gramos, parte="raiz"):

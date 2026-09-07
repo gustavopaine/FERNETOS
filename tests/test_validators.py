@@ -7,9 +7,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.tinturas.models import ComposicionBotanica, GrupoFuncional, ParametrosExtraccion, Producto
-from utils.validators import (
+from core.tintura_models import (
+    CompatibilidadFamilia,
+    ComposicionBotanica,
+    GrupoFuncional,
+    ParametrosExtraccion,
+    Producto,
+)
+from core.validators import (
     validar_composicion_botanica,
+    validar_familia_receta,
+    validar_familias_compatibles,
     validar_grupo_funcional_para_producto,
     validar_parametros_extraccion,
 )
@@ -118,3 +126,63 @@ def test_grupo_fernet_para_producto_gancia_lanza():
         validar_grupo_funcional_para_producto(
             Producto.GANCIA, GrupoFuncional.AMARGOS_ESTRUCTURALES
         )
+
+
+def test_familias_compatibles_vacia_no_lanza():
+    validar_familias_compatibles([])
+
+
+def test_familias_compatibles_validas_no_lanza():
+    validar_familias_compatibles(
+        [
+            CompatibilidadFamilia(familia="fernet", dosis_min_ml_l=1.0, dosis_max_ml_l=5.0),
+            CompatibilidadFamilia(familia="campari", dosis_min_ml_l=2.0, dosis_max_ml_l=8.0),
+        ]
+    )
+
+
+def test_familia_compatible_desconocida_lanza():
+    with pytest.raises(ValueError):
+        validar_familias_compatibles([CompatibilidadFamilia(familia="vermut")])
+
+
+def test_familia_compatible_duplicada_lanza():
+    with pytest.raises(ValueError):
+        validar_familias_compatibles(
+            [
+                CompatibilidadFamilia(familia="campari"),
+                CompatibilidadFamilia(familia="campari"),
+            ]
+        )
+
+
+@pytest.mark.parametrize("dosis_min, dosis_max", [(-1.0, 5.0), (1.0, -5.0)])
+def test_familia_compatible_dosis_negativa_lanza(dosis_min, dosis_max):
+    with pytest.raises(ValueError):
+        validar_familias_compatibles(
+            [
+                CompatibilidadFamilia(
+                    familia="fernet", dosis_min_ml_l=dosis_min, dosis_max_ml_l=dosis_max
+                )
+            ]
+        )
+
+
+def test_familia_compatible_rango_dosis_invertido_lanza():
+    with pytest.raises(ValueError):
+        validar_familias_compatibles(
+            [
+                CompatibilidadFamilia(
+                    familia="fernet", dosis_min_ml_l=20.0, dosis_max_ml_l=2.0
+                )
+            ]
+        )
+
+
+def test_familia_receta_valida_no_lanza():
+    validar_familia_receta("americano")
+
+
+def test_familia_receta_desconocida_lanza():
+    with pytest.raises(ValueError):
+        validar_familia_receta("vermut")

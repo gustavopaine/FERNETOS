@@ -12,8 +12,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from modules.curvas.analyzer import CurveAnalyzer
-from modules.tinturas.models import GrupoFuncional, Producto, RegistroExtraccion, Tintura
+from core.curve_analysis import CurveAnalyzer
+from core.tintura_models import GrupoFuncional, Producto, RegistroExtraccion, Tintura
 
 
 def _tintura_gancia(grupo):
@@ -77,6 +77,27 @@ def test_sugerir_dia_corte_fernet_con_amargos_sigue_igual():
     _con_un_registro(tintura, dia=10)
     analyzer = CurveAnalyzer(tintura)
     assert analyzer.sugerir_dia_corte() == 12  # min(21, 10+2)
+
+
+def test_analizar_completo_maneja_dia_optimo_cero():
+    """Regresión: un chequeo truthy trataba día 0 (día de corte legítimo)
+    como "sin día sugerido" y saltaba el cálculo de intensidad_optima y
+    tiempo_estabilizacion. Campari no tiene estrategia de día de corte
+    registrada, así que con un único registro en día 0 el fallback de
+    sugerir_dia_corte() devuelve 0."""
+    tintura = Tintura(
+        nombre="Campari sin heurística propia",
+        producto=Producto.CAMPARI,
+        grupo_funcional=GrupoFuncional.AMARGOS_ESTRUCTURALES,
+    )
+    _con_un_registro(tintura, dia=0, intensidad=15)
+    analyzer = CurveAnalyzer(tintura)
+
+    analisis = analyzer.analizar_completo()
+
+    assert analisis.dia_optimo_sugerido == 0
+    assert analisis.intensidad_optima == 15
+    assert analisis.tiempo_estabilizacion == 15
 
 
 def test_sugerir_dia_corte_campari_con_amargos_no_usa_heuristica_de_fernet():

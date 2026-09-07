@@ -204,6 +204,30 @@ class ControlCalidad:
 
 
 @dataclass
+class CompatibilidadFamilia:
+    """
+    Compatibilidad de una tintura con una familia de producto (fernet,
+    americano, campari, etc.) y el rango de dosis recomendado para esa
+    familia. Una misma tintura puede servir a varias familias, cada una
+    con su propio rango - por eso vive en una lista aparte de `producto`
+    (que es la familia "nativa"/original de la tintura).
+    """
+
+    familia: str
+    dosis_min_ml_l: Optional[float] = None  # ml de tintura por litro de blend
+    dosis_max_ml_l: Optional[float] = None
+    notas: str = ""
+
+    def to_dict(self) -> Dict:
+        return {
+            "familia": self.familia,
+            "dosis_min_ml_l": self.dosis_min_ml_l,
+            "dosis_max_ml_l": self.dosis_max_ml_l,
+            "notas": self.notas,
+        }
+
+
+@dataclass
 class Tintura:
     """
     Modelo principal de tintura.
@@ -247,14 +271,19 @@ class Tintura:
     ubicacion_almacen: str = ""
     notas_internas: str = ""
 
+    # Compatibilidad con otras familias de producto (además de `producto`,
+    # que es la familia nativa)
+    compatibilidad_familias: List[CompatibilidadFamilia] = field(default_factory=list)
+
     # Metadatos
     creado_por: str = "sistema"
     tags: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         """Validaciones y cálculos automáticos"""
-        from utils.validators import (
+        from core.validators import (
             validar_composicion_botanica,
+            validar_familias_compatibles,
             validar_grupo_funcional_para_producto,
             validar_parametros_extraccion,
         )
@@ -263,6 +292,7 @@ class Tintura:
         if self.parametros is not None:
             validar_parametros_extraccion(self.parametros)
         validar_grupo_funcional_para_producto(self.producto, self.grupo_funcional)
+        validar_familias_compatibles(self.compatibilidad_familias)
 
         if self.fecha_inicio is None:
             self.fecha_inicio = datetime.now()
@@ -365,6 +395,9 @@ class Tintura:
             "observaciones": self.observaciones_iniciales,
             "volumen_disponible_ml": self.volumen_disponible_ml,
             "ubicacion": self.ubicacion_almacen,
+            "compatibilidad_familias": [
+                c.to_dict() for c in self.compatibilidad_familias
+            ],
             "tags": self.tags,
         }
 

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from modules.ensamblaje.calculator_americano import (
+from families.gancia.americano_calculator import (
     INGREDIENTES_CORE,
     INGREDIENTES_CORE_SECUNDARIOS,
     INGREDIENTES_OPCIONALES,
@@ -19,7 +19,7 @@ from modules.ensamblaje.calculator_americano import (
     ComposicionAmericano,
     VarianteExperimental,
 )
-from modules.tinturas.models import ComposicionBotanica
+from core.tintura_models import ComposicionBotanica
 
 
 def _ingrediente(especie, parte="cascara"):
