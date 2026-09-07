@@ -50,6 +50,7 @@ class DatabaseManager:
         self._migrar_columna_producto()
         self._migrar_tabla_compatibilidad_familias()
         self._migrar_tabla_recetas()
+        self._migrar_tablas_evaluacion()
 
     def _migrar_columna_producto(self):
         """Agrega la columna 'producto' a tinturas si todavía no existe."""
@@ -108,6 +109,101 @@ class DatabaseManager:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia)"
+            )
+            conn.commit()
+
+    def _migrar_tablas_evaluacion(self):
+        """Crea las tablas del modulo de evaluacion/torneo si no existen."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS eventos (
+                    id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL,
+                    fecha TEXT NOT NULL,
+                    sede TEXT,
+                    edicion_numero INTEGER
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS categorias (
+                    id TEXT PRIMARY KEY,
+                    evento_id TEXT NOT NULL,
+                    familia TEXT NOT NULL,
+                    submodalidad TEXT NOT NULL,
+                    FOREIGN KEY (evento_id) REFERENCES eventos(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS muestras (
+                    id TEXT PRIMARY KEY,
+                    categoria_id TEXT NOT NULL,
+                    codigo_ciego TEXT NOT NULL,
+                    receta_id_interna TEXT,
+                    productor_id TEXT,
+                    UNIQUE(categoria_id, codigo_ciego),
+                    FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jurados (
+                    id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL,
+                    rol TEXT NOT NULL,
+                    peso_voto REAL NOT NULL DEFAULT 1.0
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS puntajes (
+                    id TEXT PRIMARY KEY,
+                    muestra_id TEXT NOT NULL,
+                    jurado_id TEXT NOT NULL,
+                    visual REAL NOT NULL,
+                    aroma REAL NOT NULL,
+                    sabor_boca REAL NOT NULL,
+                    comentario_libre TEXT,
+                    timestamp TEXT NOT NULL,
+                    UNIQUE(muestra_id, jurado_id),
+                    FOREIGN KEY (muestra_id) REFERENCES muestras(id) ON DELETE CASCADE,
+                    FOREIGN KEY (jurado_id) REFERENCES jurados(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rankings (
+                    categoria_id TEXT NOT NULL,
+                    muestra_id TEXT NOT NULL,
+                    puntaje_final REAL NOT NULL,
+                    posicion INTEGER NOT NULL,
+                    PRIMARY KEY (categoria_id, muestra_id),
+                    FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE CASCADE,
+                    FOREIGN KEY (muestra_id) REFERENCES muestras(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_categorias_evento ON categorias(evento_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_muestras_categoria ON muestras(categoria_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_puntajes_muestra ON puntajes(muestra_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_puntajes_jurado ON puntajes(jurado_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_rankings_categoria ON rankings(categoria_id)"
             )
             conn.commit()
 
@@ -221,12 +317,74 @@ class DatabaseManager:
             fecha_creacion TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS eventos (
+            id TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            fecha TEXT NOT NULL,
+            sede TEXT,
+            edicion_numero INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS categorias (
+            id TEXT PRIMARY KEY,
+            evento_id TEXT NOT NULL,
+            familia TEXT NOT NULL,
+            submodalidad TEXT NOT NULL,
+            FOREIGN KEY (evento_id) REFERENCES eventos(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS muestras (
+            id TEXT PRIMARY KEY,
+            categoria_id TEXT NOT NULL,
+            codigo_ciego TEXT NOT NULL,
+            receta_id_interna TEXT,
+            productor_id TEXT,
+            UNIQUE(categoria_id, codigo_ciego),
+            FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS jurados (
+            id TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            rol TEXT NOT NULL,
+            peso_voto REAL NOT NULL DEFAULT 1.0
+        );
+
+        CREATE TABLE IF NOT EXISTS puntajes (
+            id TEXT PRIMARY KEY,
+            muestra_id TEXT NOT NULL,
+            jurado_id TEXT NOT NULL,
+            visual REAL NOT NULL,
+            aroma REAL NOT NULL,
+            sabor_boca REAL NOT NULL,
+            comentario_libre TEXT,
+            timestamp TEXT NOT NULL,
+            UNIQUE(muestra_id, jurado_id),
+            FOREIGN KEY (muestra_id) REFERENCES muestras(id) ON DELETE CASCADE,
+            FOREIGN KEY (jurado_id) REFERENCES jurados(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS rankings (
+            categoria_id TEXT NOT NULL,
+            muestra_id TEXT NOT NULL,
+            puntaje_final REAL NOT NULL,
+            posicion INTEGER NOT NULL,
+            PRIMARY KEY (categoria_id, muestra_id),
+            FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE CASCADE,
+            FOREIGN KEY (muestra_id) REFERENCES muestras(id) ON DELETE CASCADE
+        );
+
         -- Índices
         CREATE INDEX IF NOT EXISTS idx_tinturas_estado ON tinturas(estado);
         CREATE INDEX IF NOT EXISTS idx_tinturas_grupo ON tinturas(grupo_funcional);
         CREATE INDEX IF NOT EXISTS idx_registros_tintura ON registros_curva(tintura_id);
         CREATE INDEX IF NOT EXISTS idx_compat_familias_tintura ON compatibilidad_familias(tintura_id);
         CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia);
+        CREATE INDEX IF NOT EXISTS idx_categorias_evento ON categorias(evento_id);
+        CREATE INDEX IF NOT EXISTS idx_muestras_categoria ON muestras(categoria_id);
+        CREATE INDEX IF NOT EXISTS idx_puntajes_muestra ON puntajes(muestra_id);
+        CREATE INDEX IF NOT EXISTS idx_puntajes_jurado ON puntajes(jurado_id);
+        CREATE INDEX IF NOT EXISTS idx_rankings_categoria ON rankings(categoria_id);
         """
 
         with self.get_connection() as conn:
