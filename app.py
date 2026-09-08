@@ -1030,7 +1030,7 @@ elif menu == "🧮 Ensamblaje":
 
     blend_repo = BlendRepository(db)
 
-    tabs = st.tabs(["🧪 Nuevo Blend", "📋 Historial", "📊 Análisis"])
+    tabs = st.tabs(["🧪 Nuevo Blend", "📋 Historial", "📊 Análisis"], key="ensamblaje_fernet_tabs")
 
     with tabs[0]:
         st.subheader("Crear Nuevo Blend")
@@ -1538,328 +1538,322 @@ elif menu == "🍷 Ensamblaje Gancia":
     gancia_calculator = GanciaCalculator()
     blend_repo_gancia = BlendRepository(db)
 
-    st.subheader("Crear Nuevo Blend de Gancia")
+    tabs_gancia = st.tabs(["🧪 Nuevo Blend", "📋 Historial"], key="ensamblaje_gancia_tabs")
 
-    col_p1, col_p2, col_p3 = st.columns(3)
+    with tabs_gancia[0]:
+        st.subheader("Crear Nuevo Blend de Gancia")
 
-    with col_p1:
-        volumen_gancia = st.number_input(
-            "📊 Volumen objetivo (L)",
-            min_value=0.5,
-            max_value=100.0,
-            value=10.0,
-            step=0.5,
-            key="gancia_volumen",
-        )
-        abv_gancia = st.number_input(
-            "🥃 ABV objetivo (%)",
-            min_value=15.0,
-            max_value=18.0,
-            value=17.0,
-            step=0.5,
-            key="gancia_abv",
-        )
+        col_p1, col_p2, col_p3 = st.columns(3)
 
-    with col_p2:
-        vino_pct_gancia = st.slider(
-            "🍷 % Vino sobre el volumen",
-            min_value=75.0,
-            max_value=80.0,
-            value=78.0,
-            step=0.5,
-            key="gancia_vino_pct",
-        )
-        vino_abv_gancia = st.number_input(
-            "Grado del vino base (%)",
-            min_value=8.0,
-            max_value=15.0,
-            value=12.0,
-            step=0.5,
-            key="gancia_vino_abv",
-        )
-        alcohol_fortificacion_abv_gancia = st.number_input(
-            "Grado del alcohol de fortificación (%)",
-            min_value=90.0,
-            max_value=96.5,
-            value=96.0,
-            step=0.5,
-            key="gancia_fortificacion_abv",
-        )
-
-    with col_p3:
-        azucar_pct_gancia = st.slider(
-            "🍬 Azúcar (% p/v)",
-            min_value=8.0,
-            max_value=12.0,
-            value=10.0,
-            step=0.5,
-            key="gancia_azucar_pct",
-            help="Gramos de azúcar seca por 100ml",
-        )
-        acido_citrico_gancia = st.number_input(
-            "🍋 Ácido cítrico (g/L)",
-            min_value=0.0,
-            max_value=5.0,
-            value=0.0,
-            step=0.1,
-            key="gancia_acido_citrico",
-        )
-        caramelo_gancia = st.number_input(
-            "🎨 Caramelo E150 (ml)",
-            min_value=0.0,
-            max_value=50.0,
-            value=0.0,
-            step=1.0,
-            key="gancia_caramelo",
-        )
-
-    st.divider()
-
-    st.subheader("🧪 Tinturas de Gancia Disponibles en Stock")
-
-    tinturas_gancia_stock = repo.listar(estado="lista", producto=Producto.GANCIA.value)
-
-    tinturas_seleccionadas_gancia = {}
-
-    if not tinturas_gancia_stock:
-        st.warning(
-            "⚠️ No hay tinturas de Gancia disponibles en stock. Creá y finalizá "
-            "tinturas de producto Gancia en la sección 🧪 Tinturas."
-        )
-    else:
-        num_tinturas_g = len(tinturas_gancia_stock)
-
-        for i in range(0, num_tinturas_g, 2):
-            cols = st.columns(2)
-            for offset, col in enumerate(cols):
-                idx = i + offset
-                if idx >= num_tinturas_g:
-                    continue
-                t = tinturas_gancia_stock[idx]
-                with col:
-                    with st.container(border=True):
-                        st.write(f"**{t.nombre}**")
-                        st.caption(
-                            f"📦 Stock: {t.volumen_disponible_ml:.0f} ml | 🏷️ {t.grupo_funcional.value if t.grupo_funcional else 'N/A'}"
-                        )
-                        ml = st.number_input(
-                            f"ml para {t.nombre[:15]}...",
-                            min_value=0.0,
-                            max_value=float(t.volumen_disponible_ml),
-                            value=0.0,
-                            step=5.0,
-                            key=f"gancia_t_{t.id}",
-                            format="%.0f",
-                        )
-                        if ml > 0:
-                            tinturas_seleccionadas_gancia[t.id] = ml
-                            st.caption(f"✅ Usando {ml:.0f} ml")
-
-    st.divider()
-
-    if st.button("🍷 Calcular Blend de Gancia", type="primary", use_container_width=True):
-        with st.spinner("Calculando blend..."):
-            try:
-                params_gancia = GanciaBlendParams(
-                    volumen_objetivo_litros=volumen_gancia,
-                    abv_objetivo=abv_gancia,
-                    vino_pct=vino_pct_gancia / 100,
-                    vino_abv=vino_abv_gancia,
-                    alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
-                    azucar_pct_wv=azucar_pct_gancia,
-                    acido_citrico_g_l=acido_citrico_gancia,
-                    caramelo_ml=caramelo_gancia,
-                )
-
-                tinturas_ml_total = sum(tinturas_seleccionadas_gancia.values())
-                vino_ml, alcohol_fortificacion_ml, agua_ml = (
-                    gancia_calculator.calcular_base_vino_alcohol(
-                        params_gancia, tinturas_ml_total
-                    )
-                )
-
-                tinturas_data_gancia = {}
-                for tid in tinturas_seleccionadas_gancia.keys():
-                    t = repo.get_by_id(tid)
-                    if t:
-                        tinturas_data_gancia[tid] = t
-
-                azucar_g = GanciaCalculator.calcular_azucar(
-                    azucar_pct_gancia, params_gancia.volumen_objetivo_ml
-                )
-
-                composicion_gancia = ComposicionBlendGancia(
-                    vino_ml=vino_ml,
-                    alcohol_fortificacion_ml=alcohol_fortificacion_ml,
-                    tinturas=tinturas_seleccionadas_gancia,
-                    agua_ml=agua_ml,
-                    azucar_g=azucar_g,
-                    acido_citrico_g=acido_citrico_gancia * volumen_gancia,
-                    caramelo_ml=caramelo_gancia,
-                )
-
-                abv_calculado_gancia = GanciaCalculator.calcular_abv_blend(
-                    composicion_gancia,
-                    tinturas_data_gancia,
-                    vino_abv=vino_abv_gancia,
-                    alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
-                )
-
-                resultado_gancia = GanciaBlendResult(
-                    params=params_gancia,
-                    composicion=composicion_gancia,
-                    abv_calculado=abv_calculado_gancia,
-                    # azucar_pct_wv es % p/v (g/100ml) dosificado contra el
-                    # volumen objetivo -> x10 para expresarlo en g/L. Mismo
-                    # criterio que Fernet: se ecoa el target dosificado, no
-                    # se recalcula contra el volumen real (igual que
-                    # calcular_blend_completo hace con azucar_efectiva_gpl).
-                    azucar_efectiva_g_l=azucar_pct_gancia * 10,
-                )
-                # En session_state para que sobreviva al rerun que dispara el
-                # propio boton de descarga de la ficha tecnica (ver el mismo
-                # fix en Ensamblaje Fernet, hallazgo de /code-review high).
-                st.session_state["ensamblaje_gancia_resultado"] = resultado_gancia
-                st.session_state["ensamblaje_gancia_tinturas_data"] = tinturas_data_gancia
-                st.session_state["ensamblaje_gancia_vino_abv"] = vino_abv_gancia
-                st.session_state["ensamblaje_gancia_fortificacion_abv"] = (
-                    alcohol_fortificacion_abv_gancia
-                )
-            except Exception as e:
-                st.error(f"Error calculando blend de Gancia: {e}")
-                import traceback
-
-                st.error(traceback.format_exc())
-
-    if "ensamblaje_gancia_resultado" in st.session_state:
-        resultado_gancia = st.session_state["ensamblaje_gancia_resultado"]
-        tinturas_data_gancia = st.session_state["ensamblaje_gancia_tinturas_data"]
-        vino_abv_gancia = st.session_state["ensamblaje_gancia_vino_abv"]
-        alcohol_fortificacion_abv_gancia = st.session_state[
-            "ensamblaje_gancia_fortificacion_abv"
-        ]
-        composicion_gancia = resultado_gancia.composicion
-        vino_ml = composicion_gancia.vino_ml
-        alcohol_fortificacion_ml = composicion_gancia.alcohol_fortificacion_ml
-        agua_ml = composicion_gancia.agua_ml
-        azucar_g = composicion_gancia.azucar_g
-
-        st.success("✅ Blend de Gancia calculado exitosamente!")
-        st.caption(
-            "Resultado del último cálculo. Si cambiaste algún parámetro "
-            "arriba, presioná \"Calcular Blend de Gancia\" de nuevo antes "
-            "de descargar la ficha técnica."
-        )
-
-        if agua_ml < 0:
-            st.warning(
-                "⚠️ El agua remanente da negativo: el % de vino más las "
-                "tinturas ya superan el volumen objetivo. Bajá el % de "
-                "vino o el volumen de tinturas."
+        with col_p1:
+            volumen_gancia = st.number_input(
+                "📊 Volumen objetivo (L)",
+                min_value=0.5,
+                max_value=100.0,
+                value=10.0,
+                step=0.5,
+                key="gancia_volumen",
+            )
+            abv_gancia = st.number_input(
+                "🥃 ABV objetivo (%)",
+                min_value=15.0,
+                max_value=18.0,
+                value=17.0,
+                step=0.5,
+                key="gancia_abv",
             )
 
-        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+        with col_p2:
+            vino_pct_gancia = st.slider(
+                "🍷 % Vino sobre el volumen",
+                min_value=75.0,
+                max_value=80.0,
+                value=78.0,
+                step=0.5,
+                key="gancia_vino_pct",
+            )
+            vino_abv_gancia = st.number_input(
+                "Grado del vino base (%)",
+                min_value=8.0,
+                max_value=15.0,
+                value=12.0,
+                step=0.5,
+                key="gancia_vino_abv",
+            )
+            alcohol_fortificacion_abv_gancia = st.number_input(
+                "Grado del alcohol de fortificación (%)",
+                min_value=90.0,
+                max_value=96.5,
+                value=96.0,
+                step=0.5,
+                key="gancia_fortificacion_abv",
+            )
 
-        with col_r1:
-            with st.container(border=True):
-                st.metric("ABV Calculado", f"{resultado_gancia.abv_calculado:.2f}%")
-
-        with col_r2:
-            with st.container(border=True):
-                st.metric(
-                    "Volumen total",
-                    f"{resultado_gancia.volumen_real_ml/1000:.2f}L",
-                )
-
-        with col_r3:
-            with st.container(border=True):
-                st.metric("Vino base", f"{vino_ml:.0f}ml")
-
-        with col_r4:
-            with st.container(border=True):
-                st.metric(
-                    "Alcohol fortificación", f"{alcohol_fortificacion_ml:.0f}ml"
-                )
+        with col_p3:
+            azucar_pct_gancia = st.slider(
+                "🍬 Azúcar (% p/v)",
+                min_value=8.0,
+                max_value=12.0,
+                value=10.0,
+                step=0.5,
+                key="gancia_azucar_pct",
+                help="Gramos de azúcar seca por 100ml",
+            )
+            acido_citrico_gancia = st.number_input(
+                "🍋 Ácido cítrico (g/L)",
+                min_value=0.0,
+                max_value=5.0,
+                value=0.0,
+                step=0.1,
+                key="gancia_acido_citrico",
+            )
+            caramelo_gancia = st.number_input(
+                "🎨 Caramelo E150 (ml)",
+                min_value=0.0,
+                max_value=50.0,
+                value=0.0,
+                step=1.0,
+                key="gancia_caramelo",
+            )
 
         st.divider()
 
-        st.subheader("📝 Receta Completa")
+        st.subheader("🧪 Tinturas de Gancia Disponibles en Stock")
 
-        col_receta1, col_receta2 = st.columns(2)
+        tinturas_gancia_stock = repo.listar(estado="lista", producto=Producto.GANCIA.value)
 
-        with col_receta1:
-            with st.container(border=True):
-                st.write("**Base vínica:**")
-                st.write(f"- Vino base ({vino_abv_gancia}%): {vino_ml:.0f} ml")
-                st.write(
-                    f"- Alcohol fortificación ({alcohol_fortificacion_abv_gancia}%): "
-                    f"{alcohol_fortificacion_ml:.0f} ml"
-                )
-                st.write(f"- Agua: {agua_ml:.0f} ml")
-                st.write(f"- Azúcar: {azucar_g:.0f} g")
-                st.write(f"- Ácido cítrico: {composicion_gancia.acido_citrico_g:.1f} g")
-                st.write(f"- Caramelo E150: {composicion_gancia.caramelo_ml:.1f} ml")
+        tinturas_seleccionadas_gancia = {}
 
-        with col_receta2:
-            with st.container(border=True):
-                st.write("**Tinturas:**")
-                if composicion_gancia.tinturas:
-                    for tid, ml in composicion_gancia.tinturas.items():
-                        t = tinturas_data_gancia.get(tid)
+        if not tinturas_gancia_stock:
+            st.warning(
+                "⚠️ No hay tinturas de Gancia disponibles en stock. Creá y finalizá "
+                "tinturas de producto Gancia en la sección 🧪 Tinturas."
+            )
+        else:
+            num_tinturas_g = len(tinturas_gancia_stock)
+
+            for i in range(0, num_tinturas_g, 2):
+                cols = st.columns(2)
+                for offset, col in enumerate(cols):
+                    idx = i + offset
+                    if idx >= num_tinturas_g:
+                        continue
+                    t = tinturas_gancia_stock[idx]
+                    with col:
+                        with st.container(border=True):
+                            st.write(f"**{t.nombre}**")
+                            st.caption(
+                                f"📦 Stock: {t.volumen_disponible_ml:.0f} ml | 🏷️ {t.grupo_funcional.value if t.grupo_funcional else 'N/A'}"
+                            )
+                            ml = st.number_input(
+                                f"ml para {t.nombre[:15]}...",
+                                min_value=0.0,
+                                max_value=float(t.volumen_disponible_ml),
+                                value=0.0,
+                                step=5.0,
+                                key=f"gancia_t_{t.id}",
+                                format="%.0f",
+                            )
+                            if ml > 0:
+                                tinturas_seleccionadas_gancia[t.id] = ml
+                                st.caption(f"✅ Usando {ml:.0f} ml")
+
+        st.divider()
+
+        if st.button("🍷 Calcular Blend de Gancia", type="primary", use_container_width=True):
+            with st.spinner("Calculando blend..."):
+                try:
+                    params_gancia = GanciaBlendParams(
+                        volumen_objetivo_litros=volumen_gancia,
+                        abv_objetivo=abv_gancia,
+                        vino_pct=vino_pct_gancia / 100,
+                        vino_abv=vino_abv_gancia,
+                        alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
+                        azucar_pct_wv=azucar_pct_gancia,
+                        acido_citrico_g_l=acido_citrico_gancia,
+                        caramelo_ml=caramelo_gancia,
+                    )
+
+                    tinturas_ml_total = sum(tinturas_seleccionadas_gancia.values())
+                    vino_ml, alcohol_fortificacion_ml, agua_ml = (
+                        gancia_calculator.calcular_base_vino_alcohol(
+                            params_gancia, tinturas_ml_total
+                        )
+                    )
+
+                    tinturas_data_gancia = {}
+                    for tid in tinturas_seleccionadas_gancia.keys():
+                        t = repo.get_by_id(tid)
                         if t:
-                            st.write(f"- {t.nombre}: {ml:.0f} ml")
-                else:
-                    st.caption("Sin tinturas en este blend")
+                            tinturas_data_gancia[tid] = t
 
-        try:
-            pdf_ficha_tecnica_gancia = _pdf_ficha_tecnica_gancia(
-                resultado_gancia, tinturas_data_gancia
-            )
-            st.download_button(
-                "📄 Descargar ficha técnica (PDF)",
-                data=pdf_ficha_tecnica_gancia,
-                file_name=f"ficha_tecnica_{resultado_gancia.id}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        except Exception as e:
-            st.error(f"Error generando la ficha técnica: {e}")
-            st.session_state.pop("ensamblaje_gancia_resultado", None)
+                    azucar_g = GanciaCalculator.calcular_azucar(
+                        azucar_pct_gancia, params_gancia.volumen_objetivo_ml
+                    )
 
-        # Guardado explicito en el historial real (Fase 4, 2/N - mismo
-        # patron que Ensamblaje Fernet): no automatico, para no
-        # ensuciar el historial con cada ajuste exploratorio.
-        nombre_blend_gancia = st.text_input(
-            "Nombre para el historial (opcional)",
-            key="ensamblaje_gancia_nombre_historial",
-            placeholder='Ej. "Gancia Competencia 2026"',
-        )
-        if st.button("💾 Guardar en el historial", key="ensamblaje_gancia_guardar_historial", use_container_width=True):
-            try:
-                blend_guardado_gancia = BlendGuardado(
-                    familia="gancia",
-                    nombre=nombre_blend_gancia.strip() or None,
-                    datos=snapshot_gancia(resultado_gancia, tinturas_data_gancia),
+                    composicion_gancia = ComposicionBlendGancia(
+                        vino_ml=vino_ml,
+                        alcohol_fortificacion_ml=alcohol_fortificacion_ml,
+                        tinturas=tinturas_seleccionadas_gancia,
+                        agua_ml=agua_ml,
+                        azucar_g=azucar_g,
+                        acido_citrico_g=acido_citrico_gancia * volumen_gancia,
+                        caramelo_ml=caramelo_gancia,
+                    )
+
+                    abv_calculado_gancia = GanciaCalculator.calcular_abv_blend(
+                        composicion_gancia,
+                        tinturas_data_gancia,
+                        vino_abv=vino_abv_gancia,
+                        alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
+                    )
+
+                    resultado_gancia = GanciaBlendResult(
+                        params=params_gancia,
+                        composicion=composicion_gancia,
+                        abv_calculado=abv_calculado_gancia,
+                        # azucar_pct_wv es % p/v (g/100ml) dosificado contra el
+                        # volumen objetivo -> x10 para expresarlo en g/L. Mismo
+                        # criterio que Fernet: se ecoa el target dosificado, no
+                        # se recalcula contra el volumen real (igual que
+                        # calcular_blend_completo hace con azucar_efectiva_gpl).
+                        azucar_efectiva_g_l=azucar_pct_gancia * 10,
+                    )
+                    # En session_state para que sobreviva al rerun que dispara el
+                    # propio boton de descarga de la ficha tecnica (ver el mismo
+                    # fix en Ensamblaje Fernet, hallazgo de /code-review high).
+                    st.session_state["ensamblaje_gancia_resultado"] = resultado_gancia
+                    st.session_state["ensamblaje_gancia_tinturas_data"] = tinturas_data_gancia
+                    st.session_state["ensamblaje_gancia_vino_abv"] = vino_abv_gancia
+                    st.session_state["ensamblaje_gancia_fortificacion_abv"] = (
+                        alcohol_fortificacion_abv_gancia
+                    )
+                except Exception as e:
+                    st.error(f"Error calculando blend de Gancia: {e}")
+                    import traceback
+
+                    st.error(traceback.format_exc())
+
+        if "ensamblaje_gancia_resultado" in st.session_state:
+            resultado_gancia = st.session_state["ensamblaje_gancia_resultado"]
+            tinturas_data_gancia = st.session_state["ensamblaje_gancia_tinturas_data"]
+            vino_abv_gancia = st.session_state["ensamblaje_gancia_vino_abv"]
+            alcohol_fortificacion_abv_gancia = st.session_state[
+                "ensamblaje_gancia_fortificacion_abv"
+            ]
+            composicion_gancia = resultado_gancia.composicion
+            vino_ml = composicion_gancia.vino_ml
+            alcohol_fortificacion_ml = composicion_gancia.alcohol_fortificacion_ml
+            agua_ml = composicion_gancia.agua_ml
+            azucar_g = composicion_gancia.azucar_g
+
+            st.success("✅ Blend de Gancia calculado exitosamente!")
+            st.caption(
+                "Resultado del último cálculo. Si cambiaste algún parámetro "
+                "arriba, presioná \"Calcular Blend de Gancia\" de nuevo antes "
+                "de descargar la ficha técnica."
+            )
+
+            if agua_ml < 0:
+                st.warning(
+                    "⚠️ El agua remanente da negativo: el % de vino más las "
+                    "tinturas ya superan el volumen objetivo. Bajá el % de "
+                    "vino o el volumen de tinturas."
                 )
-                blend_repo_gancia.guardar(blend_guardado_gancia)
-                st.success(f"✅ Guardado en el historial: {blend_guardado_gancia.id}")
+
+            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
+            with col_r1:
+                with st.container(border=True):
+                    st.metric("ABV Calculado", f"{resultado_gancia.abv_calculado:.2f}%")
+
+            with col_r2:
+                with st.container(border=True):
+                    st.metric(
+                        "Volumen total",
+                        f"{resultado_gancia.volumen_real_ml/1000:.2f}L",
+                    )
+
+            with col_r3:
+                with st.container(border=True):
+                    st.metric("Vino base", f"{vino_ml:.0f}ml")
+
+            with col_r4:
+                with st.container(border=True):
+                    st.metric(
+                        "Alcohol fortificación", f"{alcohol_fortificacion_ml:.0f}ml"
+                    )
+
+            st.divider()
+
+            st.subheader("📝 Receta Completa")
+
+            col_receta1, col_receta2 = st.columns(2)
+
+            with col_receta1:
+                with st.container(border=True):
+                    st.write("**Base vínica:**")
+                    st.write(f"- Vino base ({vino_abv_gancia}%): {vino_ml:.0f} ml")
+                    st.write(
+                        f"- Alcohol fortificación ({alcohol_fortificacion_abv_gancia}%): "
+                        f"{alcohol_fortificacion_ml:.0f} ml"
+                    )
+                    st.write(f"- Agua: {agua_ml:.0f} ml")
+                    st.write(f"- Azúcar: {azucar_g:.0f} g")
+                    st.write(f"- Ácido cítrico: {composicion_gancia.acido_citrico_g:.1f} g")
+                    st.write(f"- Caramelo E150: {composicion_gancia.caramelo_ml:.1f} ml")
+
+            with col_receta2:
+                with st.container(border=True):
+                    st.write("**Tinturas:**")
+                    if composicion_gancia.tinturas:
+                        for tid, ml in composicion_gancia.tinturas.items():
+                            t = tinturas_data_gancia.get(tid)
+                            if t:
+                                st.write(f"- {t.nombre}: {ml:.0f} ml")
+                    else:
+                        st.caption("Sin tinturas en este blend")
+
+            try:
+                pdf_ficha_tecnica_gancia = _pdf_ficha_tecnica_gancia(
+                    resultado_gancia, tinturas_data_gancia
+                )
+                st.download_button(
+                    "📄 Descargar ficha técnica (PDF)",
+                    data=pdf_ficha_tecnica_gancia,
+                    file_name=f"ficha_tecnica_{resultado_gancia.id}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
             except Exception as e:
-                st.error(f"Error guardando en el historial: {e}")
+                st.error(f"Error generando la ficha técnica: {e}")
+                st.session_state.pop("ensamblaje_gancia_resultado", None)
 
-    st.divider()
+            # Guardado explicito en el historial real (Fase 4, 2/N - mismo
+            # patron que Ensamblaje Fernet): no automatico, para no
+            # ensuciar el historial con cada ajuste exploratorio.
+            nombre_blend_gancia = st.text_input(
+                "Nombre para el historial (opcional)",
+                key="ensamblaje_gancia_nombre_historial",
+                placeholder='Ej. "Gancia Competencia 2026"',
+            )
+            if st.button("💾 Guardar en el historial", key="ensamblaje_gancia_guardar_historial", use_container_width=True):
+                try:
+                    blend_guardado_gancia = BlendGuardado(
+                        familia="gancia",
+                        nombre=nombre_blend_gancia.strip() or None,
+                        datos=snapshot_gancia(resultado_gancia, tinturas_data_gancia),
+                    )
+                    blend_repo_gancia.guardar(blend_guardado_gancia)
+                    st.success(f"✅ Guardado en el historial: {blend_guardado_gancia.id}")
+                except Exception as e:
+                    st.error(f"Error guardando en el historial: {e}")
 
-    # Historial en un expander, no una tab: a diferencia de Ensamblaje
-    # Fernet, este bloque no usa st.tabs() - restructurarlo entero a
-    # tabs seria una edicion grande y riesgosa sobre ~300 lineas ya
-    # existentes (mismo tipo de edicion donde aparecio el bug de
-    # indentacion de st.rerun() en el slice de Fernet). Un expander al
-    # final logra el mismo resultado (historial fuera del flujo
-    # principal) sin tocar la estructura existente.
-    with st.expander("📋 Historial de Blends de Gancia"):
+    with tabs_gancia[1]:
         blends_guardados_gancia = blend_repo_gancia.listar(familia="gancia")
 
         if not blends_guardados_gancia:
-            st.info("Todavía no guardaste ningún blend. Calculá uno arriba y usá 'Guardar en el historial'.")
+            st.info("Todavía no guardaste ningún blend. Calculá uno en 'Nuevo Blend' y usá 'Guardar en el historial'.")
         else:
             st.dataframe(
                 pd.DataFrame(
@@ -1964,221 +1958,219 @@ elif menu == "🍸 Ensamblaje Campari":
 
     blend_repo_campari = BlendRepository(db)
 
-    # (especie, parte_utilizada, gramos de referencia, unidad mostrada en el
-    # label). "unidad" para las cascaras: la receta real las cuenta como "1
-    # unidad" entera, no como peso - ver docs/specs/2026-09-06-campari-cuarto-producto.md.
-    INGREDIENTES_MACERACION_REF = [
-        ("ajenjo", "hoja", 10.0, "g"),
-        ("quina", "corteza", 5.0, "g"),
-        ("genciana", "raiz", 5.0, "g"),
-        ("angelica", "raiz", 5.0, "g"),
-        ("ruibarbo", "raiz", 2.0, "g"),
-        ("chips_de_roble", "madera", 5.0, "g"),
-        ("naranja", "cascara", 1.0, "unidad"),
-        ("pomelo", "cascara", 1.0, "unidad"),
-        ("limon", "cascara", 1.0, "unidad"),
-    ]
-    INGREDIENTES_INCORPORACION_TARDIA_REF = [
-        ("hibiscus", "flor", 10.0, "g"),
-    ]
+    tabs_campari = st.tabs(["🧪 Nuevo Blend", "📋 Historial"], key="ensamblaje_campari_tabs")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        alcohol_ml_campari = st.number_input(
-            "Alcohol (ml)", min_value=100.0, value=1000.0, step=50.0
-        )
-        alcohol_abv_campari = st.number_input(
-            "Grado del alcohol (%)", min_value=20.0, max_value=96.0, value=40.0, step=1.0
-        )
-    with col2:
-        agua_ml_campari = st.number_input(
-            "Agua (ml)", min_value=0.0, value=500.0, step=50.0
-        )
-        azucar_g_campari = st.number_input(
-            "Azúcar (g)", min_value=0.0, value=225.0, step=5.0
-        )
+    with tabs_campari[0]:
+        # (especie, parte_utilizada, gramos de referencia, unidad mostrada en el
+        # label). "unidad" para las cascaras: la receta real las cuenta como "1
+        # unidad" entera, no como peso - ver docs/specs/2026-09-06-campari-cuarto-producto.md.
+        INGREDIENTES_MACERACION_REF = [
+            ("ajenjo", "hoja", 10.0, "g"),
+            ("quina", "corteza", 5.0, "g"),
+            ("genciana", "raiz", 5.0, "g"),
+            ("angelica", "raiz", 5.0, "g"),
+            ("ruibarbo", "raiz", 2.0, "g"),
+            ("chips_de_roble", "madera", 5.0, "g"),
+            ("naranja", "cascara", 1.0, "unidad"),
+            ("pomelo", "cascara", 1.0, "unidad"),
+            ("limon", "cascara", 1.0, "unidad"),
+        ]
+        INGREDIENTES_INCORPORACION_TARDIA_REF = [
+            ("hibiscus", "flor", 10.0, "g"),
+        ]
 
-    st.subheader("🌿 Botánicos (maceración)")
-    gramos_maceracion_campari = {}
-    cols_maceracion = st.columns(3)
-    for i, (especie, parte, gramos_ref, unidad) in enumerate(INGREDIENTES_MACERACION_REF):
-        with cols_maceracion[i % 3]:
-            gramos_maceracion_campari[especie] = st.number_input(
+        col1, col2 = st.columns(2)
+        with col1:
+            alcohol_ml_campari = st.number_input(
+                "Alcohol (ml)", min_value=100.0, value=1000.0, step=50.0
+            )
+            alcohol_abv_campari = st.number_input(
+                "Grado del alcohol (%)", min_value=20.0, max_value=96.0, value=40.0, step=1.0
+            )
+        with col2:
+            agua_ml_campari = st.number_input(
+                "Agua (ml)", min_value=0.0, value=500.0, step=50.0
+            )
+            azucar_g_campari = st.number_input(
+                "Azúcar (g)", min_value=0.0, value=225.0, step=5.0
+            )
+
+        st.subheader("🌿 Botánicos (maceración)")
+        gramos_maceracion_campari = {}
+        cols_maceracion = st.columns(3)
+        for i, (especie, parte, gramos_ref, unidad) in enumerate(INGREDIENTES_MACERACION_REF):
+            with cols_maceracion[i % 3]:
+                gramos_maceracion_campari[especie] = st.number_input(
+                    f"{especie.replace('_', ' ').title()} ({unidad})",
+                    min_value=0.0,
+                    value=gramos_ref,
+                    step=1.0,
+                    key=f"campari_maceracion_{especie}",
+                )
+
+        st.subheader("🌺 Incorporación tardía")
+        st.caption(
+            "Se suma recién en los últimos días de maceración (aporte de "
+            "color) - sin lógica de timing todavía, solo se registra la cantidad."
+        )
+        gramos_incorporacion_campari = {}
+        for especie, parte, gramos_ref, unidad in INGREDIENTES_INCORPORACION_TARDIA_REF:
+            gramos_incorporacion_campari[especie] = st.number_input(
                 f"{especie.replace('_', ' ').title()} ({unidad})",
                 min_value=0.0,
                 value=gramos_ref,
                 step=1.0,
-                key=f"campari_maceracion_{especie}",
+                key=f"campari_incorporacion_{especie}",
             )
 
-    st.subheader("🌺 Incorporación tardía")
-    st.caption(
-        "Se suma recién en los últimos días de maceración (aporte de "
-        "color) - sin lógica de timing todavía, solo se registra la cantidad."
-    )
-    gramos_incorporacion_campari = {}
-    for especie, parte, gramos_ref, unidad in INGREDIENTES_INCORPORACION_TARDIA_REF:
-        gramos_incorporacion_campari[especie] = st.number_input(
-            f"{especie.replace('_', ' ').title()} ({unidad})",
-            min_value=0.0,
-            value=gramos_ref,
-            step=1.0,
-            key=f"campari_incorporacion_{especie}",
-        )
-
-    st.subheader("🔬 Control de calidad (opcional)")
-    registrar_densidad_campari = st.checkbox("Registrar densidad medida (densímetro)")
-    densidad_campari = None
-    if registrar_densidad_campari:
-        densidad_campari = st.number_input(
-            "Densidad", value=1060.0, step=1.0,
-            help="Gravedad específica x1000, ej. 1060",
-        )
-
-    st.divider()
-
-    def _ingredientes_desde_gramos(referencia, gramos_por_especie):
-        # Solo los que tienen gramos > 0 - mismo criterio de "ml > 0" que
-        # usa la seleccion de tinturas de Fernet/Gancia para permitir sacar
-        # un ingrediente poniendo su cantidad en 0.
-        return [
-            ComposicionBotanica(
-                especie=especie, porcentaje=0.0, parte_utilizada=parte,
-                gramos=gramos_por_especie[especie],
+        st.subheader("🔬 Control de calidad (opcional)")
+        registrar_densidad_campari = st.checkbox("Registrar densidad medida (densímetro)")
+        densidad_campari = None
+        if registrar_densidad_campari:
+            densidad_campari = st.number_input(
+                "Densidad", value=1060.0, step=1.0,
+                help="Gravedad específica x1000, ej. 1060",
             )
-            for especie, parte, _, _ in referencia
-            if gramos_por_especie[especie] > 0
-        ]
 
-    if st.button("🍸 Calcular Blend de Campari", type="primary", use_container_width=True):
-        try:
-            composicion_campari = ComposicionCampari(
-                alcohol_ml=alcohol_ml_campari,
-                alcohol_abv=alcohol_abv_campari,
-                agua_ml=agua_ml_campari,
-                azucar_g=azucar_g_campari,
-                ingredientes_maceracion=_ingredientes_desde_gramos(
-                    INGREDIENTES_MACERACION_REF, gramos_maceracion_campari
-                ),
-                ingredientes_incorporacion_tardia=_ingredientes_desde_gramos(
-                    INGREDIENTES_INCORPORACION_TARDIA_REF, gramos_incorporacion_campari
-                ),
-            )
-            control_calidad_campari = (
-                ControlCalidad(densidad=densidad_campari)
-                if densidad_campari is not None
-                else None
-            )
-            resultado_campari = CampariCalculator.calcular_blend(
-                composicion_campari, control_calidad=control_calidad_campari
-            )
-            # Mismo patron que Fernet/Gancia: en session_state para que
-            # sobreviva al rerun que dispara el propio boton de descarga.
-            st.session_state["ensamblaje_campari_resultado"] = resultado_campari
-        except Exception as e:
-            st.error(f"Error calculando blend de Campari: {e}")
-            import traceback
+        st.divider()
 
-            st.error(traceback.format_exc())
-
-    if "ensamblaje_campari_resultado" in st.session_state:
-        resultado_campari = st.session_state["ensamblaje_campari_resultado"]
-
-        st.success("✅ Blend de Campari calculado exitosamente!")
-        st.caption(
-            "Resultado del último cálculo. Si cambiaste algún parámetro "
-            "arriba, presioná \"Calcular Blend de Campari\" de nuevo antes "
-            "de descargar la ficha técnica."
-        )
-
-        col_r1, col_r2, col_r3 = st.columns(3)
-        with col_r1:
-            with st.container(border=True):
-                st.metric("ABV Calculado", f"{resultado_campari.abv_calculado:.2f}%")
-        with col_r2:
-            with st.container(border=True):
-                st.metric(
-                    "Azúcar efectiva",
-                    f"{resultado_campari.azucar_efectiva_gpl:.0f} g/L",
+        def _ingredientes_desde_gramos(referencia, gramos_por_especie):
+            # Solo los que tienen gramos > 0 - mismo criterio de "ml > 0" que
+            # usa la seleccion de tinturas de Fernet/Gancia para permitir sacar
+            # un ingrediente poniendo su cantidad en 0.
+            return [
+                ComposicionBotanica(
+                    especie=especie, porcentaje=0.0, parte_utilizada=parte,
+                    gramos=gramos_por_especie[especie],
                 )
-        with col_r3:
-            with st.container(border=True):
-                st.metric(
-                    "Volumen final",
-                    f"{resultado_campari.composicion.volumen_final_ml/1000:.2f}L",
-                )
+                for especie, parte, _, _ in referencia
+                if gramos_por_especie[especie] > 0
+            ]
 
-        if (
-            resultado_campari.control_calidad is not None
-            and resultado_campari.control_calidad.densidad is not None
-        ):
-            st.info(f"🔬 Densidad registrada: {resultado_campari.control_calidad.densidad:.0f}")
-
-        st.subheader("📝 Receta Completa")
-        col_receta1, col_receta2 = st.columns(2)
-        with col_receta1:
-            with st.container(border=True):
-                st.write("**Base líquida:**")
-                st.write(
-                    f"- Alcohol {resultado_campari.composicion.alcohol_abv:.0f}°: "
-                    f"{resultado_campari.composicion.alcohol_ml:.0f} ml"
-                )
-                st.write(f"- Agua: {resultado_campari.composicion.agua_ml:.0f} ml")
-                st.write(f"- Azúcar: {resultado_campari.composicion.azucar_g:.0f} g")
-
-        with col_receta2:
-            with st.container(border=True):
-                st.write("**Botánicos (maceración):**")
-                for ing in resultado_campari.composicion.ingredientes_maceracion:
-                    st.write(f"- {ing.especie.replace('_', ' ').title()}: {ing.gramos:.0f}")
-                if resultado_campari.composicion.ingredientes_incorporacion_tardia:
-                    st.write("**Incorporación tardía:**")
-                    for ing in resultado_campari.composicion.ingredientes_incorporacion_tardia:
-                        st.write(f"- {ing.especie.replace('_', ' ').title()}: {ing.gramos:.0f}")
-
-        try:
-            pdf_ficha_tecnica_campari = _pdf_ficha_tecnica_campari(resultado_campari)
-            st.download_button(
-                "📄 Descargar ficha técnica (PDF)",
-                data=pdf_ficha_tecnica_campari,
-                file_name=f"ficha_tecnica_campari_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        except Exception as e:
-            st.error(f"Error generando la ficha técnica: {e}")
-            st.session_state.pop("ensamblaje_campari_resultado", None)
-
-        # Guardado explicito en el historial real (Fase 4, 3/N - mismo
-        # patron que Ensamblaje Fernet/Gancia): no automatico, para no
-        # ensuciar el historial con cada ajuste exploratorio.
-        nombre_blend_campari = st.text_input(
-            "Nombre para el historial (opcional)",
-            key="ensamblaje_campari_nombre_historial",
-            placeholder='Ej. "Campari Competencia 2026"',
-        )
-        if st.button("💾 Guardar en el historial", key="ensamblaje_campari_guardar_historial", use_container_width=True):
+        if st.button("🍸 Calcular Blend de Campari", type="primary", use_container_width=True):
             try:
-                blend_guardado_campari = BlendGuardado(
-                    familia="campari",
-                    nombre=nombre_blend_campari.strip() or None,
-                    datos=snapshot_campari(resultado_campari),
+                composicion_campari = ComposicionCampari(
+                    alcohol_ml=alcohol_ml_campari,
+                    alcohol_abv=alcohol_abv_campari,
+                    agua_ml=agua_ml_campari,
+                    azucar_g=azucar_g_campari,
+                    ingredientes_maceracion=_ingredientes_desde_gramos(
+                        INGREDIENTES_MACERACION_REF, gramos_maceracion_campari
+                    ),
+                    ingredientes_incorporacion_tardia=_ingredientes_desde_gramos(
+                        INGREDIENTES_INCORPORACION_TARDIA_REF, gramos_incorporacion_campari
+                    ),
                 )
-                blend_repo_campari.guardar(blend_guardado_campari)
-                st.success(f"✅ Guardado en el historial: {blend_guardado_campari.id}")
+                control_calidad_campari = (
+                    ControlCalidad(densidad=densidad_campari)
+                    if densidad_campari is not None
+                    else None
+                )
+                resultado_campari = CampariCalculator.calcular_blend(
+                    composicion_campari, control_calidad=control_calidad_campari
+                )
+                # Mismo patron que Fernet/Gancia: en session_state para que
+                # sobreviva al rerun que dispara el propio boton de descarga.
+                st.session_state["ensamblaje_campari_resultado"] = resultado_campari
             except Exception as e:
-                st.error(f"Error guardando en el historial: {e}")
+                st.error(f"Error calculando blend de Campari: {e}")
+                import traceback
 
-    st.divider()
+                st.error(traceback.format_exc())
 
-    # Historial en un expander, no una tab: mismo criterio que
-    # Ensamblaje Gancia (ver docs/specs/2026-09-08-fase4-historial-
-    # blends-gancia.md) - este bloque tampoco usa st.tabs().
-    with st.expander("📋 Historial de Blends de Campari"):
+        if "ensamblaje_campari_resultado" in st.session_state:
+            resultado_campari = st.session_state["ensamblaje_campari_resultado"]
+
+            st.success("✅ Blend de Campari calculado exitosamente!")
+            st.caption(
+                "Resultado del último cálculo. Si cambiaste algún parámetro "
+                "arriba, presioná \"Calcular Blend de Campari\" de nuevo antes "
+                "de descargar la ficha técnica."
+            )
+
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                with st.container(border=True):
+                    st.metric("ABV Calculado", f"{resultado_campari.abv_calculado:.2f}%")
+            with col_r2:
+                with st.container(border=True):
+                    st.metric(
+                        "Azúcar efectiva",
+                        f"{resultado_campari.azucar_efectiva_gpl:.0f} g/L",
+                    )
+            with col_r3:
+                with st.container(border=True):
+                    st.metric(
+                        "Volumen final",
+                        f"{resultado_campari.composicion.volumen_final_ml/1000:.2f}L",
+                    )
+
+            if (
+                resultado_campari.control_calidad is not None
+                and resultado_campari.control_calidad.densidad is not None
+            ):
+                st.info(f"🔬 Densidad registrada: {resultado_campari.control_calidad.densidad:.0f}")
+
+            st.subheader("📝 Receta Completa")
+            col_receta1, col_receta2 = st.columns(2)
+            with col_receta1:
+                with st.container(border=True):
+                    st.write("**Base líquida:**")
+                    st.write(
+                        f"- Alcohol {resultado_campari.composicion.alcohol_abv:.0f}°: "
+                        f"{resultado_campari.composicion.alcohol_ml:.0f} ml"
+                    )
+                    st.write(f"- Agua: {resultado_campari.composicion.agua_ml:.0f} ml")
+                    st.write(f"- Azúcar: {resultado_campari.composicion.azucar_g:.0f} g")
+
+            with col_receta2:
+                with st.container(border=True):
+                    st.write("**Botánicos (maceración):**")
+                    for ing in resultado_campari.composicion.ingredientes_maceracion:
+                        st.write(f"- {ing.especie.replace('_', ' ').title()}: {ing.gramos:.0f}")
+                    if resultado_campari.composicion.ingredientes_incorporacion_tardia:
+                        st.write("**Incorporación tardía:**")
+                        for ing in resultado_campari.composicion.ingredientes_incorporacion_tardia:
+                            st.write(f"- {ing.especie.replace('_', ' ').title()}: {ing.gramos:.0f}")
+
+            try:
+                pdf_ficha_tecnica_campari = _pdf_ficha_tecnica_campari(resultado_campari)
+                st.download_button(
+                    "📄 Descargar ficha técnica (PDF)",
+                    data=pdf_ficha_tecnica_campari,
+                    file_name=f"ficha_tecnica_campari_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            except Exception as e:
+                st.error(f"Error generando la ficha técnica: {e}")
+                st.session_state.pop("ensamblaje_campari_resultado", None)
+
+            # Guardado explicito en el historial real (Fase 4, 3/N - mismo
+            # patron que Ensamblaje Fernet/Gancia): no automatico, para no
+            # ensuciar el historial con cada ajuste exploratorio.
+            nombre_blend_campari = st.text_input(
+                "Nombre para el historial (opcional)",
+                key="ensamblaje_campari_nombre_historial",
+                placeholder='Ej. "Campari Competencia 2026"',
+            )
+            if st.button("💾 Guardar en el historial", key="ensamblaje_campari_guardar_historial", use_container_width=True):
+                try:
+                    blend_guardado_campari = BlendGuardado(
+                        familia="campari",
+                        nombre=nombre_blend_campari.strip() or None,
+                        datos=snapshot_campari(resultado_campari),
+                    )
+                    blend_repo_campari.guardar(blend_guardado_campari)
+                    st.success(f"✅ Guardado en el historial: {blend_guardado_campari.id}")
+                except Exception as e:
+                    st.error(f"Error guardando en el historial: {e}")
+
+    with tabs_campari[1]:
         blends_guardados_campari = blend_repo_campari.listar(familia="campari")
 
         if not blends_guardados_campari:
-            st.info("Todavía no guardaste ningún blend. Calculá uno arriba y usá 'Guardar en el historial'.")
+            st.info("Todavía no guardaste ningún blend. Calculá uno en 'Nuevo Blend' y usá 'Guardar en el historial'.")
         else:
             st.dataframe(
                 pd.DataFrame(
@@ -2288,216 +2280,214 @@ elif menu == "🌿 Ensamblaje Americano":
 
     blend_repo_americano = BlendRepository(db)
 
-    # (especie, parte_utilizada). El CORE (genciana/melisa) es intocable -
-    # identidad del producto; los CORE-secundarios definen el estilo de la
-    # receta base actual; los OPCIONALES son el banco para variantes (ver
-    # docs/specs/2026-09-06-americano-variantes-experimentales.md).
-    INGREDIENTES_BASE_REF = [
-        ("genciana", "raiz"),
-        ("melisa", "hoja"),
-        ("canela", "corteza"),
-        ("anis_estrellado", "fruto"),
-        ("angelica", "raiz"),
-        ("enebro", "fruto"),
-        ("pomelo", "cascara"),
-        ("limon", "cascara"),
-        ("naranja", "cascara"),
-    ]
-    INGREDIENTES_OPCIONALES_REF = [
-        ("clavo_de_olor", "flor"),
-        ("galanga", "raiz"),
-        ("paico", "hoja"),
-        ("romero", "hoja"),
-    ]
+    tabs_americano = st.tabs(["🧪 Nuevo Blend", "📋 Historial"], key="ensamblaje_americano_tabs")
 
-    batch_id_americano = st.text_input(
-        "Batch ID*",
-        value="AMERICANO_BASE_v1",
-        help='Identificador legible de esta preparación, ej. "AMERICANO_CLAVO_v1"',
-    )
+    with tabs_americano[0]:
+        # (especie, parte_utilizada). El CORE (genciana/melisa) es intocable -
+        # identidad del producto; los CORE-secundarios definen el estilo de la
+        # receta base actual; los OPCIONALES son el banco para variantes (ver
+        # docs/specs/2026-09-06-americano-variantes-experimentales.md).
+        INGREDIENTES_BASE_REF = [
+            ("genciana", "raiz"),
+            ("melisa", "hoja"),
+            ("canela", "corteza"),
+            ("anis_estrellado", "fruto"),
+            ("angelica", "raiz"),
+            ("enebro", "fruto"),
+            ("pomelo", "cascara"),
+            ("limon", "cascara"),
+            ("naranja", "cascara"),
+        ]
+        INGREDIENTES_OPCIONALES_REF = [
+            ("clavo_de_olor", "flor"),
+            ("galanga", "raiz"),
+            ("paico", "hoja"),
+            ("romero", "hoja"),
+        ]
 
-    col1, col2 = st.columns(2)
-    with col1:
-        alcohol_ml_americano = st.number_input(
-            "Alcohol (ml)", min_value=100.0, value=500.0, step=50.0
-        )
-        alcohol_abv_americano = st.number_input(
-            "Grado del alcohol (%)", min_value=20.0, max_value=96.0, value=96.0, step=1.0
-        )
-    with col2:
-        agua_ml_americano = st.number_input(
-            "Agua (ml)", min_value=0.0, value=3000.0, step=100.0,
-            help="Receta real de referencia: 3 a 5 litros",
-        )
-        azucar_g_americano = st.number_input(
-            "Azúcar (g)", min_value=0.0, value=900.0, step=50.0
+        batch_id_americano = st.text_input(
+            "Batch ID*",
+            value="AMERICANO_BASE_v1",
+            help='Identificador legible de esta preparación, ej. "AMERICANO_CLAVO_v1"',
         )
 
-    st.subheader("🌱 Ingredientes base (receta actual)")
-    st.caption(
-        "Genciana y melisa son intocables (identidad del producto). "
-        "Sacar cualquiera de los demás define una receta distinta a la real."
-    )
-    incluir_base_americano = {}
-    cols_base = st.columns(3)
-    for i, (especie, parte) in enumerate(INGREDIENTES_BASE_REF):
-        with cols_base[i % 3]:
-            incluir_base_americano[especie] = st.checkbox(
-                especie.replace("_", " ").title(),
-                value=True,
-                key=f"americano_base_{especie}",
+        col1, col2 = st.columns(2)
+        with col1:
+            alcohol_ml_americano = st.number_input(
+                "Alcohol (ml)", min_value=100.0, value=500.0, step=50.0
+            )
+            alcohol_abv_americano = st.number_input(
+                "Grado del alcohol (%)", min_value=20.0, max_value=96.0, value=96.0, step=1.0
+            )
+        with col2:
+            agua_ml_americano = st.number_input(
+                "Agua (ml)", min_value=0.0, value=3000.0, step=100.0,
+                help="Receta real de referencia: 3 a 5 litros",
+            )
+            azucar_g_americano = st.number_input(
+                "Azúcar (g)", min_value=0.0, value=900.0, step=50.0
             )
 
-    st.subheader("🧪 Variante (opcionales a agregar)")
-    incluir_opcional_americano = {}
-    cols_opcionales = st.columns(4)
-    for i, (especie, parte) in enumerate(INGREDIENTES_OPCIONALES_REF):
-        with cols_opcionales[i % 4]:
-            incluir_opcional_americano[especie] = st.checkbox(
-                especie.replace("_", " ").title(),
-                value=False,
-                key=f"americano_opcional_{especie}",
-            )
-
-    referencia_comercial_americano = st.text_area(
-        "Notas vs. referencia comercial (opcional)",
-        placeholder="Ej: Más herbal que Gancia comercial, menos dulce",
-    )
-
-    st.divider()
-
-    if st.button(
-        "🌿 Calcular Variante de Americano", type="primary", use_container_width=True
-    ):
-        if not batch_id_americano:
-            st.error("Completá el Batch ID.")
-        else:
-            try:
-                ingredientes_base = [
-                    ComposicionBotanica(especie=especie, porcentaje=0.0, parte_utilizada=parte)
-                    for especie, parte in INGREDIENTES_BASE_REF
-                    if incluir_base_americano[especie]
-                ]
-                ingredientes_variante = [
-                    ComposicionBotanica(especie=especie, porcentaje=0.0, parte_utilizada=parte)
-                    for especie, parte in INGREDIENTES_OPCIONALES_REF
-                    if incluir_opcional_americano[especie]
-                ]
-                composicion_americano = ComposicionAmericano(
-                    alcohol_ml=alcohol_ml_americano,
-                    alcohol_abv=alcohol_abv_americano,
-                    agua_ml=agua_ml_americano,
-                    azucar_g=azucar_g_americano,
-                    ingredientes_base=ingredientes_base,
-                    ingredientes_variante=ingredientes_variante,
-                )
-                variante_americano = VarianteExperimental(
-                    batch_id=batch_id_americano,
-                    composicion=composicion_americano,
-                    referencia_comercial=referencia_comercial_americano or None,
-                )
-                # Mismo patron que Fernet/Gancia/Campari: en session_state
-                # para que sobreviva al rerun que dispara el propio boton
-                # de descarga de la ficha tecnica.
-                st.session_state["ensamblaje_americano_variante"] = variante_americano
-            except Exception as e:
-                st.error(f"Error calculando la variante: {e}")
-                import traceback
-
-                st.error(traceback.format_exc())
-
-    if "ensamblaje_americano_variante" in st.session_state:
-        variante_americano = st.session_state["ensamblaje_americano_variante"]
-        composicion_americano = variante_americano.composicion
-
-        st.success(f"✅ Variante calculada: {variante_americano.batch_id}")
+        st.subheader("🌱 Ingredientes base (receta actual)")
         st.caption(
-            "Resultado del último cálculo. Si cambiaste algún parámetro "
-            "arriba, presioná \"Calcular Variante de Americano\" de nuevo "
-            "antes de descargar la ficha técnica."
+            "Genciana y melisa son intocables (identidad del producto). "
+            "Sacar cualquiera de los demás define una receta distinta a la real."
+        )
+        incluir_base_americano = {}
+        cols_base = st.columns(3)
+        for i, (especie, parte) in enumerate(INGREDIENTES_BASE_REF):
+            with cols_base[i % 3]:
+                incluir_base_americano[especie] = st.checkbox(
+                    especie.replace("_", " ").title(),
+                    value=True,
+                    key=f"americano_base_{especie}",
+                )
+
+        st.subheader("🧪 Variante (opcionales a agregar)")
+        incluir_opcional_americano = {}
+        cols_opcionales = st.columns(4)
+        for i, (especie, parte) in enumerate(INGREDIENTES_OPCIONALES_REF):
+            with cols_opcionales[i % 4]:
+                incluir_opcional_americano[especie] = st.checkbox(
+                    especie.replace("_", " ").title(),
+                    value=False,
+                    key=f"americano_opcional_{especie}",
+                )
+
+        referencia_comercial_americano = st.text_area(
+            "Notas vs. referencia comercial (opcional)",
+            placeholder="Ej: Más herbal que Gancia comercial, menos dulce",
         )
 
-        col_r1, col_r2 = st.columns(2)
-        with col_r1:
-            with st.container(border=True):
-                st.metric("ABV Calculado", f"{variante_americano.abv_calculado:.2f}%")
-        with col_r2:
-            with st.container(border=True):
-                azucar_efectiva_americano = AmericanoCalculator.calcular_azucar_efectiva_gpl(
-                    composicion_americano.azucar_g, composicion_americano.volumen_total_ml
-                )
-                st.metric("Azúcar efectiva", f"{azucar_efectiva_americano:.0f} g/L")
+        st.divider()
 
-        st.subheader("📝 Receta Completa")
-        col_receta1, col_receta2 = st.columns(2)
-        with col_receta1:
-            with st.container(border=True):
-                st.write("**Base líquida:**")
-                st.write(
-                    f"- Alcohol {composicion_americano.alcohol_abv:.0f}°: "
-                    f"{composicion_americano.alcohol_ml:.0f} ml"
-                )
-                st.write(f"- Agua: {composicion_americano.agua_ml:.0f} ml")
-                st.write(f"- Azúcar: {composicion_americano.azucar_g:.0f} g")
+        if st.button(
+            "🌿 Calcular Variante de Americano", type="primary", use_container_width=True
+        ):
+            if not batch_id_americano:
+                st.error("Completá el Batch ID.")
+            else:
+                try:
+                    ingredientes_base = [
+                        ComposicionBotanica(especie=especie, porcentaje=0.0, parte_utilizada=parte)
+                        for especie, parte in INGREDIENTES_BASE_REF
+                        if incluir_base_americano[especie]
+                    ]
+                    ingredientes_variante = [
+                        ComposicionBotanica(especie=especie, porcentaje=0.0, parte_utilizada=parte)
+                        for especie, parte in INGREDIENTES_OPCIONALES_REF
+                        if incluir_opcional_americano[especie]
+                    ]
+                    composicion_americano = ComposicionAmericano(
+                        alcohol_ml=alcohol_ml_americano,
+                        alcohol_abv=alcohol_abv_americano,
+                        agua_ml=agua_ml_americano,
+                        azucar_g=azucar_g_americano,
+                        ingredientes_base=ingredientes_base,
+                        ingredientes_variante=ingredientes_variante,
+                    )
+                    variante_americano = VarianteExperimental(
+                        batch_id=batch_id_americano,
+                        composicion=composicion_americano,
+                        referencia_comercial=referencia_comercial_americano or None,
+                    )
+                    # Mismo patron que Fernet/Gancia/Campari: en session_state
+                    # para que sobreviva al rerun que dispara el propio boton
+                    # de descarga de la ficha tecnica.
+                    st.session_state["ensamblaje_americano_variante"] = variante_americano
+                except Exception as e:
+                    st.error(f"Error calculando la variante: {e}")
+                    import traceback
 
-        with col_receta2:
-            with st.container(border=True):
-                st.write("**Ingredientes base:**")
-                for ing in composicion_americano.ingredientes_base:
-                    st.write(f"- {ing.especie.replace('_', ' ').title()} ({ing.parte_utilizada})")
-                if composicion_americano.ingredientes_variante:
-                    st.write("**Variante agregada:**")
-                    for ing in composicion_americano.ingredientes_variante:
-                        st.write(f"- {ing.especie.replace('_', ' ').title()} ({ing.parte_utilizada})")
+                    st.error(traceback.format_exc())
 
-        if variante_americano.referencia_comercial:
-            st.info(f"📝 Notas: {variante_americano.referencia_comercial}")
+        if "ensamblaje_americano_variante" in st.session_state:
+            variante_americano = st.session_state["ensamblaje_americano_variante"]
+            composicion_americano = variante_americano.composicion
 
-        try:
-            pdf_ficha_tecnica_americano = _pdf_ficha_tecnica_americano(variante_americano)
-            st.download_button(
-                "📄 Descargar ficha técnica (PDF)",
-                data=pdf_ficha_tecnica_americano,
-                file_name=f"ficha_tecnica_{variante_americano.batch_id}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
+            st.success(f"✅ Variante calculada: {variante_americano.batch_id}")
+            st.caption(
+                "Resultado del último cálculo. Si cambiaste algún parámetro "
+                "arriba, presioná \"Calcular Variante de Americano\" de nuevo "
+                "antes de descargar la ficha técnica."
             )
-        except Exception as e:
-            st.error(f"Error generando la ficha técnica: {e}")
-            st.session_state.pop("ensamblaje_americano_variante", None)
 
-        # Guardado explicito en el historial real (Fase 4, 4/N - mismo
-        # patron que Ensamblaje Fernet/Gancia/Campari): no automatico,
-        # para no ensuciar el historial con cada ajuste exploratorio.
-        # El nombre es opcional - si se deja vacio, el historial usa el
-        # batch_id (ya es un identificador legible propio de Americano).
-        nombre_blend_americano = st.text_input(
-            "Nombre para el historial (opcional)",
-            key="ensamblaje_americano_nombre_historial",
-            placeholder='Ej. "Americano Competencia 2026"',
-        )
-        if st.button("💾 Guardar en el historial", key="ensamblaje_americano_guardar_historial", use_container_width=True):
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                with st.container(border=True):
+                    st.metric("ABV Calculado", f"{variante_americano.abv_calculado:.2f}%")
+            with col_r2:
+                with st.container(border=True):
+                    azucar_efectiva_americano = AmericanoCalculator.calcular_azucar_efectiva_gpl(
+                        composicion_americano.azucar_g, composicion_americano.volumen_total_ml
+                    )
+                    st.metric("Azúcar efectiva", f"{azucar_efectiva_americano:.0f} g/L")
+
+            st.subheader("📝 Receta Completa")
+            col_receta1, col_receta2 = st.columns(2)
+            with col_receta1:
+                with st.container(border=True):
+                    st.write("**Base líquida:**")
+                    st.write(
+                        f"- Alcohol {composicion_americano.alcohol_abv:.0f}°: "
+                        f"{composicion_americano.alcohol_ml:.0f} ml"
+                    )
+                    st.write(f"- Agua: {composicion_americano.agua_ml:.0f} ml")
+                    st.write(f"- Azúcar: {composicion_americano.azucar_g:.0f} g")
+
+            with col_receta2:
+                with st.container(border=True):
+                    st.write("**Ingredientes base:**")
+                    for ing in composicion_americano.ingredientes_base:
+                        st.write(f"- {ing.especie.replace('_', ' ').title()} ({ing.parte_utilizada})")
+                    if composicion_americano.ingredientes_variante:
+                        st.write("**Variante agregada:**")
+                        for ing in composicion_americano.ingredientes_variante:
+                            st.write(f"- {ing.especie.replace('_', ' ').title()} ({ing.parte_utilizada})")
+
+            if variante_americano.referencia_comercial:
+                st.info(f"📝 Notas: {variante_americano.referencia_comercial}")
+
             try:
-                blend_guardado_americano = BlendGuardado(
-                    familia="americano",
-                    nombre=nombre_blend_americano.strip() or None,
-                    datos=snapshot_americano(variante_americano),
+                pdf_ficha_tecnica_americano = _pdf_ficha_tecnica_americano(variante_americano)
+                st.download_button(
+                    "📄 Descargar ficha técnica (PDF)",
+                    data=pdf_ficha_tecnica_americano,
+                    file_name=f"ficha_tecnica_{variante_americano.batch_id}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
                 )
-                blend_repo_americano.guardar(blend_guardado_americano)
-                st.success(f"✅ Guardado en el historial: {blend_guardado_americano.id}")
             except Exception as e:
-                st.error(f"Error guardando en el historial: {e}")
+                st.error(f"Error generando la ficha técnica: {e}")
+                st.session_state.pop("ensamblaje_americano_variante", None)
 
-    st.divider()
+            # Guardado explicito en el historial real (Fase 4, 4/N - mismo
+            # patron que Ensamblaje Fernet/Gancia/Campari): no automatico,
+            # para no ensuciar el historial con cada ajuste exploratorio.
+            # El nombre es opcional - si se deja vacio, el historial usa el
+            # batch_id (ya es un identificador legible propio de Americano).
+            nombre_blend_americano = st.text_input(
+                "Nombre para el historial (opcional)",
+                key="ensamblaje_americano_nombre_historial",
+                placeholder='Ej. "Americano Competencia 2026"',
+            )
+            if st.button("💾 Guardar en el historial", key="ensamblaje_americano_guardar_historial", use_container_width=True):
+                try:
+                    blend_guardado_americano = BlendGuardado(
+                        familia="americano",
+                        nombre=nombre_blend_americano.strip() or None,
+                        datos=snapshot_americano(variante_americano),
+                    )
+                    blend_repo_americano.guardar(blend_guardado_americano)
+                    st.success(f"✅ Guardado en el historial: {blend_guardado_americano.id}")
+                except Exception as e:
+                    st.error(f"Error guardando en el historial: {e}")
 
-    # Historial en un expander, no una tab: mismo criterio que
-    # Ensamblaje Gancia/Campari (ver docs/specs/2026-09-08-fase4-
-    # historial-blends-gancia.md) - este bloque tampoco usa st.tabs().
-    with st.expander("📋 Historial de Blends de Americano"):
+    with tabs_americano[1]:
         blends_guardados_americano = blend_repo_americano.listar(familia="americano")
 
         if not blends_guardados_americano:
-            st.info("Todavía no guardaste ningún blend. Calculá uno arriba y usá 'Guardar en el historial'.")
+            st.info("Todavía no guardaste ningún blend. Calculá uno en 'Nuevo Blend' y usá 'Guardar en el historial'.")
         else:
             st.dataframe(
                 pd.DataFrame(
