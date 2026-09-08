@@ -177,6 +177,7 @@ with st.sidebar:
             "⚖️ Pruebas A/B Gancia",
             "📦 Stock",
             "⚙️ Configuración",
+            "🏆 Torneo",
         ],
     )
 
@@ -5539,6 +5540,594 @@ elif menu == "⚙️ Configuración":
                     else:
                         st.error(f"❌ No encontrado")
                         st.caption(f"Buscado en: `{script_path}`")
+
+# =========================================================
+# MÓDULO DE TORNEO (cata a ciegas)
+# =========================================================
+elif menu == "🏆 Torneo":
+    st.title("🏆 Torneo")
+
+    from core.validators import FAMILIAS_COMPATIBLES_VALIDAS
+    from evaluation.blind_coding import orden_cata_para_jurado
+    from evaluation.cierre_ronda import cerrar_ronda_categoria
+    from evaluation.historico import historico_productor, historico_receta
+    from evaluation.models import Categoria, Evento, Jurado, Muestra, Puntaje, RolJurado, SubModalidad
+    from evaluation.progreso import calcular_progreso_categoria
+    from evaluation.reportes import generar_ficha_cata_muestra, generar_planilla_resultados_categoria
+    from evaluation.repository import (
+        CategoriaRepository,
+        EventoRepository,
+        JuradoRepository,
+        MuestraRepository,
+        PuntajeRepository,
+        RankingRepository,
+    )
+
+    evento_repo = EventoRepository(db)
+    categoria_repo = CategoriaRepository(db)
+    jurado_repo = JuradoRepository(db)
+    muestra_repo = MuestraRepository(db)
+    puntaje_repo = PuntajeRepository(db)
+    ranking_repo = RankingRepository(db)
+
+    def _nombre_categoria(categoria):
+        return f"{categoria.familia} ({categoria.submodalidad.value})"
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_planilla_resultados(categoria, muestras, ranking):
+        # Cacheado por contenido (categoria/muestras/ranking no cambian
+        # hasta que se recalcula la ronda): sin esto, Streamlit reconstruye
+        # el PDF en cada rerun de la app entera, no solo cuando esta tab
+        # esta a la vista (todas las tabs ejecutan su cuerpo en cada rerun).
+        return generar_planilla_resultados_categoria(categoria, muestras, ranking)
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_cata(muestra, puntajes, jurados_, puntaje_final):
+        return generar_ficha_cata_muestra(muestra, puntajes, jurados_, puntaje_final)
+
+    def _form_crear_evento(key_suffix):
+        with st.form(f"torneo_nuevo_evento_{key_suffix}"):
+            nombre = st.text_input("Nombre*", key=f"torneo_evento_nombre_{key_suffix}")
+            fecha = st.date_input("Fecha*", key=f"torneo_evento_fecha_{key_suffix}")
+            sede = st.text_input("Sede*", key=f"torneo_evento_sede_{key_suffix}")
+            edicion_numero = st.number_input(
+                "Número de edición*",
+                min_value=1,
+                step=1,
+                value=1,
+                key=f"torneo_evento_edicion_{key_suffix}",
+            )
+            if st.form_submit_button("Crear evento"):
+                if not nombre or not sede:
+                    st.error("Completá nombre y sede.")
+                else:
+                    try:
+                        evento = Evento(
+                            nombre=nombre,
+                            fecha=fecha.strftime("%Y-%m-%d"),
+                            sede=sede,
+                            edicion_numero=int(edicion_numero),
+                        )
+                        evento_repo.guardar(evento)
+                        st.session_state["torneo_evento_id"] = evento.id
+                        st.success(f"✅ Evento creado: {evento.nombre}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error creando evento: {e}")
+
+    # EventoRepository.listar() ordena por rowid (orden de creacion), asi
+    # que eventos[-1] es siempre el evento creado mas recientemente.
+    eventos = evento_repo.listar()
+
+    if not eventos:
+        st.info("Todavía no hay ningún evento cargado. Creá el primero para empezar.")
+        _form_crear_evento("inicial")
+    else:
+        opciones_evento = {
+            e.id: f"{e.nombre} (ed. {e.edicion_numero}, {e.fecha})" for e in eventos
+        }
+        ids_evento = list(opciones_evento.keys())
+        evento_id_default = st.session_state.get("torneo_evento_id", eventos[-1].id)
+        if evento_id_default not in opciones_evento:
+            evento_id_default = eventos[-1].id
+
+        evento_id = st.selectbox(
+            "Evento activo",
+            options=ids_evento,
+            format_func=lambda eid: opciones_evento[eid],
+            index=ids_evento.index(evento_id_default),
+        )
+        st.session_state["torneo_evento_id"] = evento_id
+
+        # Las categorias de las tabs de abajo estan scopeadas al evento
+        # activo; si el evento cambio, las selecciones de categoria
+        # guardadas en session_state pueden apuntar a un id que ya no esta
+        # en las opciones. Sin este reset explicito, Streamlit las
+        # descarta en silencio y cae al primer item de la lista nueva -
+        # correcto pero facil de no notar. Limpiarlas hace el reset
+        # explicito en vez de depender de ese fallback implicito.
+        if st.session_state.get("torneo_ultimo_evento_visto") != evento_id:
+            for key in (
+                "torneo_categoria_activa",
+                "torneo_categoria_muestra",
+                "torneo_categoria_progreso",
+                "torneo_categoria_resultados",
+            ):
+                st.session_state.pop(key, None)
+            st.session_state["torneo_ultimo_evento_visto"] = evento_id
+
+        with st.expander("➕ Crear nuevo evento"):
+            _form_crear_evento("nuevo")
+
+        st.divider()
+
+        categorias = categoria_repo.listar(evento_id=evento_id)
+        jurados = jurado_repo.listar()
+
+        tab_config, tab_puntaje, tab_progreso, tab_resultados, tab_productor = st.tabs(
+            [
+                "⚙️ Configuración",
+                "📝 Cargar puntaje",
+                "📊 Progreso en vivo",
+                "🏅 Resultados",
+                "👤 Panel de productor",
+            ]
+        )
+
+        # TAB CONFIGURACIÓN
+        with tab_config:
+            st.subheader("Categorías")
+            if categorias:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "ID": c.id,
+                                "Familia": c.familia,
+                                "Submodalidad": c.submodalidad.value,
+                            }
+                            for c in categorias
+                        ]
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.info("Este evento todavía no tiene categorías.")
+
+            with st.form("torneo_nueva_categoria"):
+                familia = st.selectbox("Familia*", sorted(FAMILIAS_COMPATIBLES_VALIDAS))
+                submodalidad = st.selectbox(
+                    "Submodalidad*", [s.value for s in SubModalidad]
+                )
+                if st.form_submit_button("Crear categoría"):
+                    try:
+                        categoria = Categoria(
+                            evento_id=evento_id,
+                            familia=familia,
+                            submodalidad=SubModalidad(submodalidad),
+                        )
+                        categoria_repo.guardar(categoria)
+                        st.success(f"✅ Categoría creada: {_nombre_categoria(categoria)}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error creando categoría: {e}")
+
+            st.divider()
+            st.subheader("Jurados")
+            if jurados:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "ID": j.id,
+                                "Nombre": j.nombre,
+                                "Rol": j.rol.value,
+                                "Peso de voto": j.peso_voto,
+                            }
+                            for j in jurados
+                        ]
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.info("Todavía no hay jurados cargados.")
+
+            with st.form("torneo_nuevo_jurado"):
+                nombre_jurado = st.text_input("Nombre*")
+                rol_jurado = st.selectbox("Rol*", [r.value for r in RolJurado])
+                peso_voto = st.number_input(
+                    "Peso de voto*", min_value=0.01, value=1.0, step=0.1
+                )
+                if st.form_submit_button("Crear jurado"):
+                    if not nombre_jurado:
+                        st.error("Completá el nombre.")
+                    else:
+                        try:
+                            jurado = Jurado(
+                                nombre=nombre_jurado,
+                                rol=RolJurado(rol_jurado),
+                                peso_voto=peso_voto,
+                            )
+                            jurado_repo.guardar(jurado)
+                            st.success(f"✅ Jurado creado: {jurado.nombre}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error creando jurado: {e}")
+
+            st.divider()
+            st.subheader("Muestras")
+            if not categorias:
+                st.info("Creá una categoría primero para poder cargar muestras.")
+            else:
+                categoria_id_muestra = st.selectbox(
+                    "Categoría",
+                    options=[c.id for c in categorias],
+                    format_func=lambda cid: _nombre_categoria(
+                        next(c for c in categorias if c.id == cid)
+                    ),
+                    key="torneo_categoria_muestra",
+                )
+                revelar = st.checkbox(
+                    "🔓 Revelar productor/receta en esta vista", value=False
+                )
+                muestras_categoria = muestra_repo.listar(categoria_id=categoria_id_muestra)
+                if muestras_categoria:
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "Código ciego": m.codigo_ciego,
+                                    "Receta interna": (
+                                        (m.receta_id_interna or "-")
+                                        if revelar
+                                        else "🔒 oculto"
+                                    ),
+                                    "Productor": (
+                                        (m.productor_id or "-") if revelar else "🔒 oculto"
+                                    ),
+                                }
+                                for m in muestras_categoria
+                            ]
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                else:
+                    st.info("Esta categoría todavía no tiene muestras.")
+
+                with st.form("torneo_nueva_muestra"):
+                    receta_id_interna = st.text_input("Receta interna (opcional)")
+                    productor_id = st.text_input("Productor (opcional)")
+                    if st.form_submit_button("Agregar muestra"):
+                        try:
+                            muestra = Muestra(
+                                categoria_id=categoria_id_muestra,
+                                receta_id_interna=receta_id_interna or None,
+                                productor_id=productor_id or None,
+                            )
+                            muestra_repo.guardar(muestra)
+                            st.success(
+                                f"✅ Muestra creada, código ciego: {muestra.codigo_ciego}"
+                            )
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error creando muestra: {e}")
+
+        # TAB CARGAR PUNTAJE
+        with tab_puntaje:
+            if not jurados:
+                st.info("Cargá al menos un jurado en la tab de Configuración.")
+            elif not categorias:
+                st.info("Cargá al menos una categoría en la tab de Configuración.")
+            else:
+                col1, col2 = st.columns(2)
+                with col1:
+                    jurado_id_sel = st.selectbox(
+                        "Jurado",
+                        options=[j.id for j in jurados],
+                        format_func=lambda jid: next(
+                            j.nombre for j in jurados if j.id == jid
+                        ),
+                        key="torneo_jurado_activo",
+                    )
+                with col2:
+                    categoria_id_sel = st.selectbox(
+                        "Categoría",
+                        options=[c.id for c in categorias],
+                        format_func=lambda cid: _nombre_categoria(
+                            next(c for c in categorias if c.id == cid)
+                        ),
+                        key="torneo_categoria_activa",
+                    )
+
+                muestras_categoria = muestra_repo.listar(categoria_id=categoria_id_sel)
+                if not muestras_categoria:
+                    st.info("Esta categoría todavía no tiene muestras.")
+                else:
+                    orden = orden_cata_para_jurado(muestras_categoria, jurado_id_sel)
+                    for muestra in orden:
+                        puntajes_existentes = puntaje_repo.listar(
+                            muestra_id=muestra.id, jurado_id=jurado_id_sel
+                        )
+                        puntaje_previo = (
+                            puntajes_existentes[0] if puntajes_existentes else None
+                        )
+
+                        titulo = f"{'✅' if puntaje_previo else '⬜'} Muestra {muestra.codigo_ciego}"
+                        with st.expander(titulo, expanded=puntaje_previo is None):
+                            with st.form(f"torneo_puntaje_{muestra.id}_{jurado_id_sel}"):
+                                # int(...): Puntaje.visual/aroma/sabor_boca son float
+                                # (para la matematica de puntaje_ponderado()), pero
+                                # st.slider exige que value/min_value/max_value sean
+                                # del mismo tipo numerico.
+                                visual = st.slider(
+                                    "Visual",
+                                    1,
+                                    10,
+                                    value=int(puntaje_previo.visual) if puntaje_previo else 5,
+                                )
+                                aroma = st.slider(
+                                    "Aroma",
+                                    1,
+                                    10,
+                                    value=int(puntaje_previo.aroma) if puntaje_previo else 5,
+                                )
+                                sabor_boca = st.slider(
+                                    "Sabor y boca",
+                                    1,
+                                    10,
+                                    value=(
+                                        int(puntaje_previo.sabor_boca)
+                                        if puntaje_previo
+                                        else 5
+                                    ),
+                                )
+                                comentario = st.text_area(
+                                    "Comentario libre",
+                                    value=(
+                                        puntaje_previo.comentario_libre
+                                        if puntaje_previo
+                                        else ""
+                                    ),
+                                )
+                                etiqueta_boton = (
+                                    "Actualizar puntaje"
+                                    if puntaje_previo
+                                    else "Guardar puntaje"
+                                )
+                                if st.form_submit_button(etiqueta_boton):
+                                    try:
+                                        puntaje = Puntaje(
+                                            muestra_id=muestra.id,
+                                            jurado_id=jurado_id_sel,
+                                            visual=visual,
+                                            aroma=aroma,
+                                            sabor_boca=sabor_boca,
+                                            comentario_libre=comentario,
+                                        )
+                                        puntaje_repo.guardar(puntaje)
+                                        st.success("✅ Puntaje guardado")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error guardando puntaje: {e}")
+
+        # TAB PROGRESO EN VIVO
+        with tab_progreso:
+            if not categorias:
+                st.info("Cargá al menos una categoría en la tab de Configuración.")
+            else:
+                categoria_id_progreso = st.selectbox(
+                    "Categoría",
+                    options=[c.id for c in categorias],
+                    format_func=lambda cid: _nombre_categoria(
+                        next(c for c in categorias if c.id == cid)
+                    ),
+                    key="torneo_categoria_progreso",
+                )
+                muestras_categoria = muestra_repo.listar(
+                    categoria_id=categoria_id_progreso
+                )
+                # Una sola consulta para todos los Puntaje en vez de una por
+                # muestra (mismo criterio que evaluation/cierre_ronda.py).
+                ids_muestras_categoria = {m.id for m in muestras_categoria}
+                puntajes_categoria = [
+                    p for p in puntaje_repo.listar() if p.muestra_id in ids_muestras_categoria
+                ]
+                progreso = calcular_progreso_categoria(
+                    muestras_categoria, jurados, puntajes_categoria
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(
+                        "Puntajes cargados",
+                        f"{progreso.puntajes_cargados}/{progreso.puntajes_esperados}",
+                    )
+                with col2:
+                    st.metric("Pendientes", len(progreso.pendientes))
+
+                if progreso.pendientes:
+                    muestras_por_id = {m.id: m for m in muestras_categoria}
+                    jurados_por_id = {j.id: j for j in jurados}
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "Muestra": muestras_por_id[mid].codigo_ciego,
+                                    "Jurado": jurados_por_id[jid].nombre,
+                                }
+                                for mid, jid in progreso.pendientes
+                            ]
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                st.divider()
+                if st.button("🔒 Cerrar ronda y calcular ranking", type="primary"):
+                    try:
+                        ranking = cerrar_ronda_categoria(
+                            categoria_id_progreso,
+                            muestra_repo,
+                            puntaje_repo,
+                            jurado_repo,
+                            ranking_repo,
+                        )
+                        st.success("✅ Ronda cerrada, ranking calculado.")
+                        muestras_por_id = {m.id: m for m in muestras_categoria}
+                        st.dataframe(
+                            pd.DataFrame(
+                                [
+                                    {
+                                        "Posición": r.posicion,
+                                        "Código": muestras_por_id[r.muestra_id].codigo_ciego,
+                                        "Puntaje final": round(r.puntaje_final, 2),
+                                    }
+                                    for r in ranking
+                                ]
+                            ),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                        st.info("Mirá la tab '🏅 Resultados' para descargar los reportes.")
+                    except ValueError as e:
+                        st.error(f"No se pudo cerrar la ronda: {e}")
+
+        # TAB RESULTADOS
+        with tab_resultados:
+            # Una sola consulta para todos los Ranking en vez de una por
+            # categoria.
+            ids_categoria_con_ranking = {r.categoria_id for r in ranking_repo.listar()}
+            categorias_con_ranking = [
+                c for c in categorias if c.id in ids_categoria_con_ranking
+            ]
+            if not categorias_con_ranking:
+                st.info("Todavía ninguna categoría de este evento cerró su ronda.")
+            else:
+                categoria_id_resultado = st.selectbox(
+                    "Categoría",
+                    options=[c.id for c in categorias_con_ranking],
+                    format_func=lambda cid: _nombre_categoria(
+                        next(c for c in categorias_con_ranking if c.id == cid)
+                    ),
+                    key="torneo_categoria_resultados",
+                )
+                categoria_resultado = next(
+                    c for c in categorias_con_ranking if c.id == categoria_id_resultado
+                )
+                ranking = ranking_repo.listar(categoria_id_resultado)
+                muestras_categoria = muestra_repo.listar(
+                    categoria_id=categoria_id_resultado
+                )
+                muestras_por_id = {m.id: m for m in muestras_categoria}
+
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Posición": r.posicion,
+                                "Código": muestras_por_id[r.muestra_id].codigo_ciego,
+                                "Puntaje final": round(r.puntaje_final, 2),
+                            }
+                            for r in ranking
+                        ]
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                pdf_planilla = _pdf_planilla_resultados(
+                    categoria_resultado, muestras_categoria, ranking
+                )
+                st.download_button(
+                    "📄 Descargar planilla de resultados (PDF)",
+                    data=pdf_planilla,
+                    file_name=f"resultados_{categoria_resultado.familia}_{categoria_resultado.submodalidad.value}.pdf",
+                    mime="application/pdf",
+                )
+
+                st.divider()
+                st.subheader("Fichas de cata por muestra")
+                ranking_por_muestra = {r.muestra_id: r for r in ranking}
+                for muestra in muestras_categoria:
+                    r = ranking_por_muestra.get(muestra.id)
+                    if not r:
+                        continue
+                    puntajes_muestra = puntaje_repo.listar(muestra_id=muestra.id)
+                    pdf_ficha = _pdf_ficha_cata(
+                        muestra, puntajes_muestra, jurados, r.puntaje_final
+                    )
+                    st.download_button(
+                        f"📄 Ficha de cata - {muestra.codigo_ciego}",
+                        data=pdf_ficha,
+                        file_name=f"ficha_{muestra.codigo_ciego}.pdf",
+                        mime="application/pdf",
+                        key=f"torneo_ficha_{muestra.id}",
+                    )
+
+        # TAB PANEL DE PRODUCTOR
+        with tab_productor:
+            st.caption(
+                "Trazabilidad de una receta o un productor a través de todas las "
+                "ediciones del torneo, no solo el evento activo."
+            )
+            criterio = st.radio(
+                "Buscar por", ["Receta interna", "Productor"], horizontal=True
+            )
+            valor_busqueda = st.text_input(
+                "Receta interna" if criterio == "Receta interna" else "Productor"
+            )
+
+            if valor_busqueda:
+                try:
+                    if criterio == "Receta interna":
+                        apariciones = historico_receta(
+                            valor_busqueda,
+                            muestra_repo,
+                            categoria_repo,
+                            evento_repo,
+                            ranking_repo,
+                        )
+                    else:
+                        apariciones = historico_productor(
+                            valor_busqueda,
+                            muestra_repo,
+                            categoria_repo,
+                            evento_repo,
+                            ranking_repo,
+                        )
+
+                    if not apariciones:
+                        st.info("Sin apariciones registradas para ese valor.")
+                    else:
+                        st.dataframe(
+                            pd.DataFrame(
+                                [
+                                    {
+                                        "Evento": a.evento_nombre,
+                                        "Edición": a.evento_edicion_numero,
+                                        "Fecha": a.evento_fecha,
+                                        "Categoría": f"{a.categoria_familia} ({a.categoria_submodalidad.value})",
+                                        "Código ciego": a.codigo_ciego,
+                                        "Posición": (
+                                            a.posicion if a.posicion is not None else "—"
+                                        ),
+                                        "Puntaje final": (
+                                            round(a.puntaje_final, 2)
+                                            if a.puntaje_final is not None
+                                            else "—"
+                                        ),
+                                    }
+                                    for a in apariciones
+                                ]
+                            ),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                except Exception as e:
+                    st.error(f"Error buscando histórico: {e}")
 
 # =========================================================
 # PIE DE PÁGINA

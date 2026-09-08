@@ -14,7 +14,7 @@ siguientes de la Fase 2, todavia no implementados.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional, Tuple
 import uuid
 
 from core.validators import validar_familia_receta
@@ -177,3 +177,15 @@ class AparicionHistorica:
     codigo_ciego: str
     posicion: Optional[int] = None
     puntaje_final: Optional[float] = None
+
+
+@dataclass
+class ProgresoCategoria:
+    """
+    Cuantos `Puntaje` faltan para poder cerrar la ronda de una
+    categoria (roadmap, seccion 5.4, "planilla de puntajes en vivo").
+    """
+
+    puntajes_cargados: int
+    puntajes_esperados: int
+    pendientes: List[Tuple[str, str]]  # (muestra_id, jurado_id) sin Puntaje

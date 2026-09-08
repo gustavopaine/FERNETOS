@@ -81,6 +81,16 @@ def test_evento_guardar_y_recuperar(db):
     assert [e.id for e in repo.listar()] == [evento.id]
 
 
+def test_evento_listar_devuelve_en_orden_de_creacion(db):
+    repo = EventoRepository(db)
+    primero = Evento(nombre="E1", fecha="2026-11-15", sede="X", edicion_numero=1)
+    segundo = Evento(nombre="E2", fecha="2025-01-01", sede="Y", edicion_numero=1)
+    repo.guardar(primero)
+    repo.guardar(segundo)
+
+    assert [e.id for e in repo.listar()] == [primero.id, segundo.id]
+
+
 def test_categoria_guardar_recuperar_y_listar_por_evento(db):
     repo = CategoriaRepository(db)
     evento = Evento(nombre="E1", fecha="2026-11-15", sede="X", edicion_numero=1)
@@ -95,6 +105,29 @@ def test_categoria_guardar_recuperar_y_listar_por_evento(db):
 
     assert [c.id for c in repo.listar(evento_id=evento.id)] == [cat.id]
     assert repo.listar(evento_id="EVT-INEXISTENTE") == []
+
+
+def test_categoria_duplicada_en_mismo_evento_lanza(db):
+    repo = CategoriaRepository(db)
+    evento = Evento(nombre="E1", fecha="2026-11-15", sede="X", edicion_numero=1)
+    EventoRepository(db).guardar(evento)
+    repo.guardar(Categoria(evento_id=evento.id, familia="campari", submodalidad=SubModalidad.CON_SODA))
+
+    duplicada = Categoria(evento_id=evento.id, familia="campari", submodalidad=SubModalidad.CON_SODA)
+    with pytest.raises(ValueError):
+        repo.guardar(duplicada)
+
+
+def test_categoria_re_guardar_la_misma_no_lanza(db):
+    """Actualizar (INSERT OR REPLACE) la misma categoria por su id no debe
+    dispararse a si misma como 'duplicada'."""
+    repo = CategoriaRepository(db)
+    evento = Evento(nombre="E1", fecha="2026-11-15", sede="X", edicion_numero=1)
+    EventoRepository(db).guardar(evento)
+    cat = Categoria(evento_id=evento.id, familia="campari", submodalidad=SubModalidad.CON_SODA)
+    repo.guardar(cat)
+
+    repo.guardar(cat)  # no debe lanzar
 
 
 def test_muestra_guardar_y_recuperar_con_campos_ocultos(db):
@@ -189,3 +222,19 @@ def test_ranking_guardar_listar_y_actualizar(db):
     resultado = repo.listar(categoria_id=categoria.id)
     assert len(resultado) == 2
     assert resultado[0].puntaje_final == pytest.approx(9.0)
+
+
+def test_ranking_listar_sin_categoria_id_devuelve_todas_las_categorias(db):
+    cat1 = _crear_categoria(db)
+    cat2 = _crear_categoria(db)
+    m1 = _crear_muestra(db, categoria_id=cat1.id)
+    m2 = _crear_muestra(db, categoria_id=cat2.id)
+    repo = RankingRepository(db)
+    repo.guardar(Ranking(categoria_id=cat1.id, muestra_id=m1.id, puntaje_final=8.0, posicion=1))
+    repo.guardar(Ranking(categoria_id=cat2.id, muestra_id=m2.id, puntaje_final=6.0, posicion=1))
+
+    resultado = repo.listar()
+
+    assert {(r.categoria_id, r.muestra_id) for r in resultado} == {
+        (cat1.id, m1.id), (cat2.id, m2.id),
+    }

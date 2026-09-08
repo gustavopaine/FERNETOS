@@ -41,7 +41,11 @@ class EventoRepository:
         return self._fila_a_evento(row) if row else None
 
     def listar(self) -> List[Evento]:
-        rows = self.db.ejecutar("SELECT * FROM eventos")
+        # ORDER BY rowid: orden de creacion garantizado (no depende del plan
+        # de consulta de SQLite), asi que el ultimo elemento es siempre el
+        # evento creado mas recientemente - la UI de app.py usa eso como
+        # default de "evento activo".
+        rows = self.db.ejecutar("SELECT * FROM eventos ORDER BY rowid")
         return [self._fila_a_evento(r) for r in rows]
 
     def eliminar(self, evento_id: str) -> bool:
@@ -63,6 +67,25 @@ class CategoriaRepository:
         self.db = db_manager
 
     def guardar(self, categoria: Categoria) -> str:
+        # Sin este chequeo, un doble submit del form (o el organizador
+        # recreando la misma familia/submodalidad por error) inserta una
+        # segunda Categoria con id distinto pero identica a la vista del
+        # usuario, fragmentando muestras/progreso/ranking entre las dos
+        # en silencio. `id != ?` permite re-guardar (actualizar) la misma
+        # categoria sin disparar el chequeo contra si misma.
+        duplicada = self.db.ejecutar(
+            """
+            SELECT id FROM categorias
+            WHERE evento_id = ? AND familia = ? AND submodalidad = ? AND id != ?
+            """,
+            (categoria.evento_id, categoria.familia, categoria.submodalidad.value, categoria.id),
+        )
+        if duplicada:
+            raise ValueError(
+                f"Ya existe una categoria '{categoria.familia} "
+                f"({categoria.submodalidad.value})' para este evento"
+            )
+
         self.db.ejecutar(
             """
             INSERT OR REPLACE INTO categorias (id, evento_id, familia, submodalidad)
@@ -274,11 +297,19 @@ class RankingRepository:
             (ranking.categoria_id, ranking.muestra_id, ranking.puntaje_final, ranking.posicion),
         )
 
-    def listar(self, categoria_id: str) -> List[Ranking]:
-        rows = self.db.ejecutar(
-            "SELECT * FROM rankings WHERE categoria_id = ? ORDER BY posicion ASC",
-            (categoria_id,),
-        )
+    def listar(self, categoria_id: Optional[str] = None) -> List[Ranking]:
+        """Sin `categoria_id`, devuelve los Ranking de TODAS las categorias
+        (ej. para saber cuales ya cerraron su ronda sin una consulta por
+        categoria)."""
+        if categoria_id is None:
+            rows = self.db.ejecutar(
+                "SELECT * FROM rankings ORDER BY categoria_id, posicion ASC"
+            )
+        else:
+            rows = self.db.ejecutar(
+                "SELECT * FROM rankings WHERE categoria_id = ? ORDER BY posicion ASC",
+                (categoria_id,),
+            )
         return [
             Ranking(
                 categoria_id=r["categoria_id"],
