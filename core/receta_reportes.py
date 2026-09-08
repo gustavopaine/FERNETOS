@@ -498,6 +498,97 @@ def generar_ficha_tecnica_blend_campari(resultado: CampariBlendResult) -> bytes:
     )
 
 
+def _filas_composicion_desde_snapshot_campari(composicion: dict) -> List[Tuple[str, float, str]]:
+    """
+    Igual que `_filas_composicion_campari`, pero a partir de un dict ya
+    serializado (`BlendGuardado.datos["composicion"]`, ver
+    core/blend_snapshot.py::snapshot_campari) en vez de un
+    `CampariBlendResult` en vivo.
+    """
+    total = composicion["alcohol_ml"] + composicion["agua_ml"]
+    if total <= 0:
+        raise ValueError("No se puede generar la ficha de un blend con volumen total 0")
+
+    alcohol_ml = composicion["alcohol_ml"]
+    agua_ml = composicion["agua_ml"]
+    return [
+        (
+            f"Alcohol {composicion['alcohol_abv']:.0f}°",
+            alcohol_ml,
+            f"{(alcohol_ml / total) * 100:.1f}%",
+        ),
+        ("Agua", agua_ml, f"{(agua_ml / total) * 100:.1f}%"),
+    ]
+
+
+def _filas_botanicos_desde_snapshot(ingredientes: List[dict]) -> List[Tuple[str, str]]:
+    """
+    Igual que `_filas_botanicos`, pero a partir de dicts ya
+    serializados (`ComposicionBotanica.to_dict()`, ver
+    core/blend_snapshot.py::snapshot_campari) en vez de objetos
+    `ComposicionBotanica` en vivo. Mismo criterio de "cascara" -
+    "unidad" en vez de "g".
+    """
+    filas = []
+    for ingrediente in ingredientes:
+        nombre = f"{ingrediente['especie'].replace('_', ' ').title()} ({ingrediente['parte_utilizada']})"
+        if ingrediente.get("gramos") is not None:
+            unidad = "unidad" if ingrediente["parte_utilizada"] == "cascara" else "g"
+            cantidad = f"{ingrediente['gramos']:.0f} {unidad}"
+        else:
+            cantidad = f"{ingrediente['porcentaje']:.1f}%"
+        filas.append((nombre, cantidad))
+    return filas
+
+
+def generar_ficha_tecnica_desde_historial_campari(blend: BlendGuardado) -> bytes:
+    """
+    Ficha tecnica de un `BlendGuardado` de Campari (Fase 4, mismo
+    patron que `generar_ficha_tecnica_desde_historial_fernet`/
+    `_gancia`): lee de `blend.datos` en vez de un `CampariBlendResult`
+    en vivo. Sin `parametros`: igual que la version en vivo, Campari
+    no tiene un target separado de la composicion. Devuelve los bytes
+    del PDF.
+    """
+    datos = blend.datos
+    filas = _filas_composicion_desde_snapshot_campari(datos["composicion"])
+
+    secciones_extra = []
+    if datos["composicion"]["ingredientes_maceracion"]:
+        secciones_extra.append(
+            (
+                "Botánicos (maceración)",
+                _filas_botanicos_desde_snapshot(datos["composicion"]["ingredientes_maceracion"]),
+            )
+        )
+    if datos["composicion"]["ingredientes_incorporacion_tardia"]:
+        secciones_extra.append(
+            (
+                "Incorporación tardía",
+                _filas_botanicos_desde_snapshot(
+                    datos["composicion"]["ingredientes_incorporacion_tardia"]
+                ),
+            )
+        )
+
+    resultado_calculado = [
+        ("ABV calculado", f"{datos['resultado_calculado']['abv_calculado']:.2f}%"),
+        ("Azúcar efectiva", f"{datos['resultado_calculado']['azucar_efectiva_gpl']:.1f} g/L"),
+    ]
+    if datos["resultado_calculado"].get("densidad") is not None:
+        resultado_calculado.append(
+            ("Densidad (densímetro)", f"{datos['resultado_calculado']['densidad']:.0f}")
+        )
+
+    return _generar_pdf_ficha_tecnica(
+        f"Ficha Técnica - Campari ({blend.nombre or blend.id})",
+        datetime.fromisoformat(datos["fecha_calculo"]),
+        filas,
+        resultado_calculado,
+        secciones_extra=secciones_extra,
+    )
+
+
 def _filas_ingredientes_americano(
     ingredientes: List[ComposicionBotanica],
 ) -> List[Tuple[str, str]]:
@@ -561,6 +652,87 @@ def generar_ficha_tecnica_variante_americano(variante: VarianteExperimental) -> 
         f"Ficha Técnica - Americano (batch {variante.batch_id})",
         variante.fecha_creacion,
         filas_composicion,
+        resultado_calculado,
+        secciones_extra=secciones_extra,
+    )
+
+
+def _filas_composicion_desde_snapshot_americano(
+    composicion: dict,
+) -> List[Tuple[str, float, str]]:
+    """
+    Igual que la version en vivo de `generar_ficha_tecnica_variante_
+    americano`, pero a partir de un dict ya serializado
+    (`BlendGuardado.datos["composicion"]`, ver core/blend_snapshot.py
+    ::snapshot_americano).
+    """
+    total = composicion["alcohol_ml"] + composicion["agua_ml"]
+    if total <= 0:
+        raise ValueError("No se puede generar la ficha de una variante con volumen total 0")
+
+    alcohol_ml = composicion["alcohol_ml"]
+    agua_ml = composicion["agua_ml"]
+    return [
+        (
+            f"Alcohol {composicion['alcohol_abv']:.0f}°",
+            alcohol_ml,
+            f"{(alcohol_ml / total) * 100:.1f}%",
+        ),
+        ("Agua", agua_ml, f"{(agua_ml / total) * 100:.1f}%"),
+    ]
+
+
+def _filas_ingredientes_desde_snapshot_americano(ingredientes: List[dict]) -> List[Tuple[str, str]]:
+    """Igual que `_filas_ingredientes_americano`, pero a partir de
+    dicts ya serializados en vez de objetos `ComposicionBotanica`."""
+    return [
+        (ingrediente["especie"].replace("_", " ").title(), ingrediente["parte_utilizada"])
+        for ingrediente in ingredientes
+    ]
+
+
+def generar_ficha_tecnica_desde_historial_americano(blend: BlendGuardado) -> bytes:
+    """
+    Ficha tecnica de un `BlendGuardado` de Americano (Fase 4, mismo
+    patron que las demas familias): lee de `blend.datos` en vez de una
+    `VarianteExperimental` en vivo. El titulo usa `blend.nombre` si se
+    puso uno, si no el `batch_id` guardado (mas informativo que el id
+    generico `BG-XXXX` - a diferencia de Fernet/Gancia/Campari,
+    Americano ya trae su propio identificador legible). Devuelve los
+    bytes del PDF.
+    """
+    datos = blend.datos
+    filas = _filas_composicion_desde_snapshot_americano(datos["composicion"])
+
+    secciones_extra = [
+        (
+            "Ingredientes base",
+            _filas_ingredientes_desde_snapshot_americano(datos["composicion"]["ingredientes_base"]),
+        )
+    ]
+    if datos["composicion"]["ingredientes_variante"]:
+        secciones_extra.append(
+            (
+                "Ingredientes de la variante",
+                _filas_ingredientes_desde_snapshot_americano(
+                    datos["composicion"]["ingredientes_variante"]
+                ),
+            )
+        )
+    if datos.get("referencia_comercial"):
+        secciones_extra.append(
+            ("Notas vs. referencia comercial", [("Nota", datos["referencia_comercial"])])
+        )
+
+    resultado_calculado = [
+        ("ABV calculado", f"{datos['resultado_calculado']['abv_calculado']:.2f}%"),
+        ("Azúcar efectiva", f"{datos['resultado_calculado']['azucar_efectiva_gpl']:.0f} g/L"),
+    ]
+
+    return _generar_pdf_ficha_tecnica(
+        f"Ficha Técnica - Americano ({blend.nombre or datos['batch_id']})",
+        datetime.fromisoformat(datos["fecha_calculo"]),
+        filas,
         resultado_calculado,
         secciones_extra=secciones_extra,
     )

@@ -1946,11 +1946,23 @@ elif menu == "🍸 Ensamblaje Campari":
 
     from families.campari.campari_calculator import CampariCalculator, ComposicionCampari
     from core.tintura_models import ComposicionBotanica, ControlCalidad
-    from core.receta_reportes import generar_ficha_tecnica_blend_campari
+    from core.receta_reportes import (
+        generar_ficha_tecnica_blend_campari,
+        generar_ficha_tecnica_desde_historial_campari,
+    )
+    from core.blend_models import BlendGuardado
+    from core.blend_repository import BlendRepository
+    from core.blend_snapshot import snapshot_campari
 
     @st.cache_data(show_spinner=False)
     def _pdf_ficha_tecnica_campari(resultado):
         return generar_ficha_tecnica_blend_campari(resultado)
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_historial_campari(blend_guardado):
+        return generar_ficha_tecnica_desde_historial_campari(blend_guardado)
+
+    blend_repo_campari = BlendRepository(db)
 
     # (especie, parte_utilizada, gramos de referencia, unidad mostrada en el
     # label). "unidad" para las cascaras: la receta real las cuenta como "1
@@ -2137,6 +2149,111 @@ elif menu == "🍸 Ensamblaje Campari":
             st.error(f"Error generando la ficha técnica: {e}")
             st.session_state.pop("ensamblaje_campari_resultado", None)
 
+        # Guardado explicito en el historial real (Fase 4, 3/N - mismo
+        # patron que Ensamblaje Fernet/Gancia): no automatico, para no
+        # ensuciar el historial con cada ajuste exploratorio.
+        nombre_blend_campari = st.text_input(
+            "Nombre para el historial (opcional)",
+            key="ensamblaje_campari_nombre_historial",
+            placeholder='Ej. "Campari Competencia 2026"',
+        )
+        if st.button("💾 Guardar en el historial", key="ensamblaje_campari_guardar_historial", use_container_width=True):
+            try:
+                blend_guardado_campari = BlendGuardado(
+                    familia="campari",
+                    nombre=nombre_blend_campari.strip() or None,
+                    datos=snapshot_campari(resultado_campari),
+                )
+                blend_repo_campari.guardar(blend_guardado_campari)
+                st.success(f"✅ Guardado en el historial: {blend_guardado_campari.id}")
+            except Exception as e:
+                st.error(f"Error guardando en el historial: {e}")
+
+    st.divider()
+
+    # Historial en un expander, no una tab: mismo criterio que
+    # Ensamblaje Gancia (ver docs/specs/2026-09-08-fase4-historial-
+    # blends-gancia.md) - este bloque tampoco usa st.tabs().
+    with st.expander("📋 Historial de Blends de Campari"):
+        blends_guardados_campari = blend_repo_campari.listar(familia="campari")
+
+        if not blends_guardados_campari:
+            st.info("Todavía no guardaste ningún blend. Calculá uno arriba y usá 'Guardar en el historial'.")
+        else:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Fecha": b.fecha_guardado.strftime("%d/%m/%Y %H:%M"),
+                            "Nombre": b.nombre or b.id,
+                            "ABV": f"{b.datos['resultado_calculado']['abv_calculado']:.2f}%",
+                            "Azúcar (g/L)": f"{b.datos['resultado_calculado']['azucar_efectiva_gpl']:.0f}",
+                            "Botánicos": len(b.datos["composicion"]["ingredientes_maceracion"])
+                            + len(b.datos["composicion"]["ingredientes_incorporacion_tardia"]),
+                        }
+                        for b in blends_guardados_campari
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.divider()
+            st.subheader("🔍 Detalle")
+            opciones_historial_campari = {b.id: (b.nombre or b.id) for b in blends_guardados_campari}
+            id_seleccionado_campari = st.selectbox(
+                "Ver detalle de",
+                options=list(opciones_historial_campari.keys()),
+                format_func=lambda bid: opciones_historial_campari[bid],
+                key="ensamblaje_campari_historial_detalle",
+            )
+            # Mismo criterio que Ensamblaje Fernet/Gancia: next(...,
+            # None) + guardia explicita, no next() sin default
+            # (hallazgo de /code-review high sobre el slice de Fernet).
+            blend_detalle_campari = next(
+                (b for b in blends_guardados_campari if b.id == id_seleccionado_campari), None
+            )
+
+            if blend_detalle_campari is None:
+                st.info("Elegí un blend guardado para ver su detalle.")
+            else:
+                col_hc1, col_hc2 = st.columns(2)
+                with col_hc1:
+                    with st.container(border=True):
+                        st.write("**Resultado calculado:**")
+                        st.write(f"- ABV: {blend_detalle_campari.datos['resultado_calculado']['abv_calculado']:.2f}%")
+                        st.write(f"- Azúcar efectiva: {blend_detalle_campari.datos['resultado_calculado']['azucar_efectiva_gpl']:.0f} g/L")
+                        if blend_detalle_campari.datos['resultado_calculado'].get('densidad') is not None:
+                            st.write(f"- Densidad: {blend_detalle_campari.datos['resultado_calculado']['densidad']:.0f}")
+
+                with col_hc2:
+                    with st.container(border=True):
+                        st.write("**Composición:**")
+                        st.write(f"- Alcohol {blend_detalle_campari.datos['composicion']['alcohol_abv']:.0f}°: {blend_detalle_campari.datos['composicion']['alcohol_ml']:.0f} ml")
+                        st.write(f"- Agua: {blend_detalle_campari.datos['composicion']['agua_ml']:.0f} ml")
+                        st.write(f"- Azúcar: {blend_detalle_campari.datos['composicion']['azucar_g']:.0f} g")
+                        for ing in blend_detalle_campari.datos["composicion"]["ingredientes_maceracion"]:
+                            st.write(f"- {ing['especie'].replace('_', ' ').title()}: {ing['gramos']:.0f}")
+                        for ing in blend_detalle_campari.datos["composicion"]["ingredientes_incorporacion_tardia"]:
+                            st.write(f"- {ing['especie'].replace('_', ' ').title()} (tardía): {ing['gramos']:.0f}")
+
+                try:
+                    pdf_ficha_historial_campari = _pdf_ficha_tecnica_historial_campari(blend_detalle_campari)
+                    st.download_button(
+                        "📄 Descargar ficha técnica (PDF)",
+                        data=pdf_ficha_historial_campari,
+                        file_name=f"ficha_tecnica_{blend_detalle_campari.id}.pdf",
+                        mime="application/pdf",
+                        key=f"ensamblaje_campari_historial_pdf_{blend_detalle_campari.id}",
+                    )
+                except Exception as e:
+                    st.error(f"Error generando la ficha técnica: {e}")
+
+                if st.button("🗑️ Eliminar del historial", key="ensamblaje_campari_eliminar_historial"):
+                    blend_repo_campari.eliminar(blend_detalle_campari.id)
+                    st.success("Eliminado.")
+                    st.rerun()
+
 # =========================================================
 # MÓDULO DE ENSAMBLAJE AMERICANO - INFUSIÓN DIRECTA + VARIANTES
 # =========================================================
@@ -2153,11 +2270,23 @@ elif menu == "🌿 Ensamblaje Americano":
         VarianteExperimental,
     )
     from core.tintura_models import ComposicionBotanica
-    from core.receta_reportes import generar_ficha_tecnica_variante_americano
+    from core.receta_reportes import (
+        generar_ficha_tecnica_variante_americano,
+        generar_ficha_tecnica_desde_historial_americano,
+    )
+    from core.blend_models import BlendGuardado
+    from core.blend_repository import BlendRepository
+    from core.blend_snapshot import snapshot_americano
 
     @st.cache_data(show_spinner=False)
     def _pdf_ficha_tecnica_americano(variante):
         return generar_ficha_tecnica_variante_americano(variante)
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_historial_americano(blend_guardado):
+        return generar_ficha_tecnica_desde_historial_americano(blend_guardado)
+
+    blend_repo_americano = BlendRepository(db)
 
     # (especie, parte_utilizada). El CORE (genciana/melisa) es intocable -
     # identidad del producto; los CORE-secundarios definen el estilo de la
@@ -2336,6 +2465,115 @@ elif menu == "🌿 Ensamblaje Americano":
         except Exception as e:
             st.error(f"Error generando la ficha técnica: {e}")
             st.session_state.pop("ensamblaje_americano_variante", None)
+
+        # Guardado explicito en el historial real (Fase 4, 4/N - mismo
+        # patron que Ensamblaje Fernet/Gancia/Campari): no automatico,
+        # para no ensuciar el historial con cada ajuste exploratorio.
+        # El nombre es opcional - si se deja vacio, el historial usa el
+        # batch_id (ya es un identificador legible propio de Americano).
+        nombre_blend_americano = st.text_input(
+            "Nombre para el historial (opcional)",
+            key="ensamblaje_americano_nombre_historial",
+            placeholder='Ej. "Americano Competencia 2026"',
+        )
+        if st.button("💾 Guardar en el historial", key="ensamblaje_americano_guardar_historial", use_container_width=True):
+            try:
+                blend_guardado_americano = BlendGuardado(
+                    familia="americano",
+                    nombre=nombre_blend_americano.strip() or None,
+                    datos=snapshot_americano(variante_americano),
+                )
+                blend_repo_americano.guardar(blend_guardado_americano)
+                st.success(f"✅ Guardado en el historial: {blend_guardado_americano.id}")
+            except Exception as e:
+                st.error(f"Error guardando en el historial: {e}")
+
+    st.divider()
+
+    # Historial en un expander, no una tab: mismo criterio que
+    # Ensamblaje Gancia/Campari (ver docs/specs/2026-09-08-fase4-
+    # historial-blends-gancia.md) - este bloque tampoco usa st.tabs().
+    with st.expander("📋 Historial de Blends de Americano"):
+        blends_guardados_americano = blend_repo_americano.listar(familia="americano")
+
+        if not blends_guardados_americano:
+            st.info("Todavía no guardaste ningún blend. Calculá uno arriba y usá 'Guardar en el historial'.")
+        else:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Fecha": b.fecha_guardado.strftime("%d/%m/%Y %H:%M"),
+                            "Nombre": b.nombre or b.datos["batch_id"],
+                            "Batch ID": b.datos["batch_id"],
+                            "ABV": f"{b.datos['resultado_calculado']['abv_calculado']:.2f}%",
+                            "Azúcar (g/L)": f"{b.datos['resultado_calculado']['azucar_efectiva_gpl']:.0f}",
+                        }
+                        for b in blends_guardados_americano
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.divider()
+            st.subheader("🔍 Detalle")
+            opciones_historial_americano = {
+                b.id: (b.nombre or b.datos["batch_id"]) for b in blends_guardados_americano
+            }
+            id_seleccionado_americano = st.selectbox(
+                "Ver detalle de",
+                options=list(opciones_historial_americano.keys()),
+                format_func=lambda bid: opciones_historial_americano[bid],
+                key="ensamblaje_americano_historial_detalle",
+            )
+            # Mismo criterio que las demas familias: next(..., None) +
+            # guardia explicita, no next() sin default (hallazgo de
+            # /code-review high sobre el slice de Fernet).
+            blend_detalle_americano = next(
+                (b for b in blends_guardados_americano if b.id == id_seleccionado_americano), None
+            )
+
+            if blend_detalle_americano is None:
+                st.info("Elegí un blend guardado para ver su detalle.")
+            else:
+                col_ha1, col_ha2 = st.columns(2)
+                with col_ha1:
+                    with st.container(border=True):
+                        st.write(f"**Batch ID:** {blend_detalle_americano.datos['batch_id']}")
+                        st.write("**Resultado calculado:**")
+                        st.write(f"- ABV: {blend_detalle_americano.datos['resultado_calculado']['abv_calculado']:.2f}%")
+                        st.write(f"- Azúcar efectiva: {blend_detalle_americano.datos['resultado_calculado']['azucar_efectiva_gpl']:.0f} g/L")
+                        if blend_detalle_americano.datos.get("referencia_comercial"):
+                            st.write(f"- Notas: {blend_detalle_americano.datos['referencia_comercial']}")
+
+                with col_ha2:
+                    with st.container(border=True):
+                        st.write("**Composición:**")
+                        st.write(f"- Alcohol {blend_detalle_americano.datos['composicion']['alcohol_abv']:.0f}°: {blend_detalle_americano.datos['composicion']['alcohol_ml']:.0f} ml")
+                        st.write(f"- Agua: {blend_detalle_americano.datos['composicion']['agua_ml']:.0f} ml")
+                        st.write(f"- Azúcar: {blend_detalle_americano.datos['composicion']['azucar_g']:.0f} g")
+                        for ing in blend_detalle_americano.datos["composicion"]["ingredientes_base"]:
+                            st.write(f"- {ing['especie'].replace('_', ' ').title()} ({ing['parte_utilizada']})")
+                        for ing in blend_detalle_americano.datos["composicion"]["ingredientes_variante"]:
+                            st.write(f"- {ing['especie'].replace('_', ' ').title()} ({ing['parte_utilizada']}, variante)")
+
+                try:
+                    pdf_ficha_historial_americano = _pdf_ficha_tecnica_historial_americano(blend_detalle_americano)
+                    st.download_button(
+                        "📄 Descargar ficha técnica (PDF)",
+                        data=pdf_ficha_historial_americano,
+                        file_name=f"ficha_tecnica_{blend_detalle_americano.id}.pdf",
+                        mime="application/pdf",
+                        key=f"ensamblaje_americano_historial_pdf_{blend_detalle_americano.id}",
+                    )
+                except Exception as e:
+                    st.error(f"Error generando la ficha técnica: {e}")
+
+                if st.button("🗑️ Eliminar del historial", key="ensamblaje_americano_eliminar_historial"):
+                    blend_repo_americano.eliminar(blend_detalle_americano.id)
+                    st.success("Eliminado.")
+                    st.rerun()
 
 # =========================================================
 # MÓDULO DE MICROMEZCLAS - VERSIÓN SIMPLIFICADA

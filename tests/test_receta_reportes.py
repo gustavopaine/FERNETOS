@@ -26,7 +26,12 @@ from families.campari.campari_calculator import CampariBlendResult, ComposicionC
 from families.gancia.americano_calculator import ComposicionAmericano, VarianteExperimental
 from core.tintura_models import ComposicionBotanica, ControlCalidad, Tintura
 from core.blend_models import BlendGuardado
-from core.blend_snapshot import snapshot_fernet, snapshot_gancia
+from core.blend_snapshot import (
+    snapshot_fernet,
+    snapshot_gancia,
+    snapshot_campari,
+    snapshot_americano,
+)
 from core.receta_reportes import (
     _filas_composicion_fernet,
     _filas_composicion_gancia,
@@ -35,12 +40,18 @@ from core.receta_reportes import (
     _filas_ingredientes_americano,
     _filas_composicion_desde_snapshot_fernet,
     _filas_composicion_desde_snapshot_gancia,
+    _filas_composicion_desde_snapshot_campari,
+    _filas_botanicos_desde_snapshot,
+    _filas_composicion_desde_snapshot_americano,
+    _filas_ingredientes_desde_snapshot_americano,
     generar_ficha_tecnica_blend_fernet,
     generar_ficha_tecnica_blend_gancia,
     generar_ficha_tecnica_blend_campari,
     generar_ficha_tecnica_variante_americano,
     generar_ficha_tecnica_desde_historial_fernet,
     generar_ficha_tecnica_desde_historial_gancia,
+    generar_ficha_tecnica_desde_historial_campari,
+    generar_ficha_tecnica_desde_historial_americano,
 )
 
 
@@ -525,5 +536,162 @@ def test_generar_ficha_tecnica_desde_historial_gancia_sin_nombre_usa_id():
     blend = _blend_guardado_gancia(nombre=None)
 
     pdf = generar_ficha_tecnica_desde_historial_gancia(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+# --- generar_ficha_tecnica_desde_historial_campari (Fase 4, 3/N) ---------
+
+
+def _blend_guardado_campari(nombre="Campari Competencia 2026", **overrides):
+    resultado = _resultado_campari(**overrides)
+    return BlendGuardado(
+        familia="campari",
+        nombre=nombre,
+        datos=snapshot_campari(resultado),
+    )
+
+
+def test_filas_composicion_desde_snapshot_campari_incluye_alcohol_y_agua():
+    blend = _blend_guardado_campari()
+
+    filas = _filas_composicion_desde_snapshot_campari(blend.datos["composicion"])
+
+    nombres = [f[0] for f in filas]
+    assert any("Alcohol" in n for n in nombres)
+    assert "Agua" in nombres
+    total_pct = sum(float(pct.rstrip("%")) for _, _, pct in filas)
+    assert total_pct == pytest.approx(100.0, abs=0.1)
+
+
+def test_filas_composicion_desde_snapshot_campari_volumen_cero_lanza():
+    blend = _blend_guardado_campari(alcohol_ml=0.0, agua_ml=0.0)
+
+    with pytest.raises(ValueError):
+        _filas_composicion_desde_snapshot_campari(blend.datos["composicion"])
+
+
+def test_filas_botanicos_desde_snapshot_cascara_se_muestra_en_unidad():
+    ingredientes = [
+        {"especie": "naranja", "porcentaje": 0.0, "parte_utilizada": "cascara", "gramos": 1.0, "lote_origen": None},
+        {"especie": "ajenjo", "porcentaje": 0.0, "parte_utilizada": "hoja", "gramos": 10.0, "lote_origen": None},
+    ]
+
+    filas = _filas_botanicos_desde_snapshot(ingredientes)
+
+    assert filas[0] == ("Naranja (cascara)", "1 unidad")
+    assert filas[1] == ("Ajenjo (hoja)", "10 g")
+
+
+def test_generar_ficha_tecnica_desde_historial_campari_produce_pdf_valido():
+    blend = _blend_guardado_campari()
+
+    pdf = generar_ficha_tecnica_desde_historial_campari(blend)
+
+    assert isinstance(pdf, bytes)
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 500
+
+
+def test_generar_ficha_tecnica_desde_historial_campari_sin_nombre_usa_id():
+    blend = _blend_guardado_campari(nombre=None)
+
+    pdf = generar_ficha_tecnica_desde_historial_campari(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+def test_generar_ficha_tecnica_desde_historial_campari_sin_botanicos_no_lanza():
+    blend = _blend_guardado_campari(
+        ingredientes_maceracion=[], ingredientes_incorporacion_tardia=[]
+    )
+
+    pdf = generar_ficha_tecnica_desde_historial_campari(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+def test_generar_ficha_tecnica_desde_historial_campari_con_densidad_no_lanza():
+    blend = _blend_guardado_campari(control_calidad=ControlCalidad(densidad=1060.0))
+
+    pdf = generar_ficha_tecnica_desde_historial_campari(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+# --- generar_ficha_tecnica_desde_historial_americano (Fase 4, 4/N) -------
+
+
+def _blend_guardado_americano(nombre="Americano Competencia 2026", **overrides):
+    variante = _variante_americano(**overrides)
+    return BlendGuardado(
+        familia="americano",
+        nombre=nombre,
+        datos=snapshot_americano(variante),
+    )
+
+
+def test_filas_composicion_desde_snapshot_americano_incluye_alcohol_y_agua():
+    blend = _blend_guardado_americano()
+
+    filas = _filas_composicion_desde_snapshot_americano(blend.datos["composicion"])
+
+    nombres = [f[0] for f in filas]
+    assert any("Alcohol" in n for n in nombres)
+    assert "Agua" in nombres
+    total_pct = sum(float(pct.rstrip("%")) for _, _, pct in filas)
+    assert total_pct == pytest.approx(100.0, abs=0.1)
+
+
+def test_filas_composicion_desde_snapshot_americano_volumen_cero_lanza():
+    blend = _blend_guardado_americano(agua_ml=0.0, alcohol_ml=0.0)
+
+    with pytest.raises(ValueError):
+        _filas_composicion_desde_snapshot_americano(blend.datos["composicion"])
+
+
+def test_filas_ingredientes_desde_snapshot_americano_nombre_y_parte():
+    ingredientes = [
+        {"especie": "genciana", "parte_utilizada": "raiz", "porcentaje": 0.0, "gramos": None, "lote_origen": None},
+        {"especie": "melisa", "parte_utilizada": "hoja", "porcentaje": 0.0, "gramos": None, "lote_origen": None},
+    ]
+
+    filas = _filas_ingredientes_desde_snapshot_americano(ingredientes)
+
+    assert filas == [("Genciana", "raiz"), ("Melisa", "hoja")]
+
+
+def test_generar_ficha_tecnica_desde_historial_americano_produce_pdf_valido():
+    blend = _blend_guardado_americano()
+
+    pdf = generar_ficha_tecnica_desde_historial_americano(blend)
+
+    assert isinstance(pdf, bytes)
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 500
+
+
+def test_generar_ficha_tecnica_desde_historial_americano_sin_nombre_usa_batch_id():
+    blend = _blend_guardado_americano(nombre=None)
+
+    pdf = generar_ficha_tecnica_desde_historial_americano(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+def test_generar_ficha_tecnica_desde_historial_americano_sin_ingredientes_base_no_lanza():
+    """Regresion: mismo caso que la ficha en vivo (destildar los 9
+    checkboxes de ingredientes base deja ingredientes_base=[])."""
+    blend = _blend_guardado_americano(ingredientes_base=[])
+
+    pdf = generar_ficha_tecnica_desde_historial_americano(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+def test_generar_ficha_tecnica_desde_historial_americano_con_referencia_comercial():
+    blend = _blend_guardado_americano(referencia_comercial="Más herbal que Gancia comercial")
+
+    pdf = generar_ficha_tecnica_desde_historial_americano(blend)
 
     assert pdf.startswith(b"%PDF")

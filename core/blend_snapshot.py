@@ -9,7 +9,9 @@ composicion, no una compartida forzada).
 from typing import Dict
 
 from core.tintura_models import Tintura
+from families.campari.campari_calculator import CampariBlendResult
 from families.fernet.calculator import BlendResult
+from families.gancia.americano_calculator import AmericanoCalculator, VarianteExperimental
 from families.gancia.gancia_calculator import GanciaBlendResult
 
 
@@ -89,4 +91,77 @@ def snapshot_gancia(resultado: GanciaBlendResult, tinturas: Dict[str, Tintura]) 
         },
         "version": resultado.version,
         "fecha_calculo": resultado.fecha_calculo.isoformat(),
+    }
+
+
+def snapshot_campari(resultado: CampariBlendResult) -> dict:
+    """
+    Campari no tiene tinturas de stock que resolver a nombre (a
+    diferencia de Fernet/Gancia) - los botanicos ya son nombres
+    directos, asi que no hace falta el parametro `tinturas` que
+    llevan `snapshot_fernet`/`snapshot_gancia`. Se serializan via
+    `ComposicionBotanica.to_dict()` (ya existe en
+    core/tintura_models.py, mismo criterio que el resto del modelo).
+    Sin `params`: Campari no resuelve la composicion contra un target,
+    la composicion ingresada ES la receta (mismo criterio documentado
+    en `generar_ficha_tecnica_blend_campari`). Sin `version`:
+    `CampariBlendResult` no tiene ese campo.
+    """
+    return {
+        "composicion": {
+            "alcohol_ml": resultado.composicion.alcohol_ml,
+            "alcohol_abv": resultado.composicion.alcohol_abv,
+            "agua_ml": resultado.composicion.agua_ml,
+            "azucar_g": resultado.composicion.azucar_g,
+            "ingredientes_maceracion": [
+                i.to_dict() for i in resultado.composicion.ingredientes_maceracion
+            ],
+            "ingredientes_incorporacion_tardia": [
+                i.to_dict() for i in resultado.composicion.ingredientes_incorporacion_tardia
+            ],
+        },
+        "resultado_calculado": {
+            "abv_calculado": resultado.abv_calculado,
+            "azucar_efectiva_gpl": resultado.azucar_efectiva_gpl,
+            "densidad": (
+                resultado.control_calidad.densidad if resultado.control_calidad else None
+            ),
+        },
+        "fecha_calculo": resultado.fecha_calculo.isoformat(),
+    }
+
+
+def snapshot_americano(variante: VarianteExperimental) -> dict:
+    """
+    Igual criterio que `snapshot_campari`: sin tinturas de stock que
+    resolver, ingredientes ya son nombres directos, sin `params`
+    (la composicion ingresada ES la receta). Incluye `batch_id` y
+    `referencia_comercial` - propios de `VarianteExperimental`, sin
+    equivalente en Fernet/Gancia/Campari. La azucar efectiva se
+    recalcula con `AmericanoCalculator.calcular_azucar_efectiva_gpl`
+    (misma fuente unica que usa la ficha tecnica en vivo y la UI, no
+    se duplica la formula - ver docs/specs/2026-09-08-fase3-
+    ensamblaje-americano.md, hallazgo de /code-review high de esa
+    fase) en vez de guardarla ya calculada en `VarianteExperimental`
+    (que no la tiene como campo propio).
+    """
+    composicion = variante.composicion
+    return {
+        "batch_id": variante.batch_id,
+        "referencia_comercial": variante.referencia_comercial,
+        "composicion": {
+            "alcohol_ml": composicion.alcohol_ml,
+            "alcohol_abv": composicion.alcohol_abv,
+            "agua_ml": composicion.agua_ml,
+            "azucar_g": composicion.azucar_g,
+            "ingredientes_base": [i.to_dict() for i in composicion.ingredientes_base],
+            "ingredientes_variante": [i.to_dict() for i in composicion.ingredientes_variante],
+        },
+        "resultado_calculado": {
+            "abv_calculado": variante.abv_calculado,
+            "azucar_efectiva_gpl": AmericanoCalculator.calcular_azucar_efectiva_gpl(
+                composicion.azucar_g, composicion.volumen_total_ml
+            ),
+        },
+        "fecha_calculo": variante.fecha_creacion.isoformat(),
     }
