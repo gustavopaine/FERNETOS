@@ -10,6 +10,7 @@ from typing import Dict
 
 from core.tintura_models import Tintura
 from families.fernet.calculator import BlendResult
+from families.gancia.gancia_calculator import GanciaBlendResult
 
 
 def snapshot_fernet(resultado: BlendResult, tinturas: Dict[str, Tintura]) -> dict:
@@ -45,6 +46,46 @@ def snapshot_fernet(resultado: BlendResult, tinturas: Dict[str, Tintura]) -> dic
             "ph_estimado": resultado.ph_estimado,
             "volumen_real_ml": resultado.volumen_real_ml,
             "margen_error_ml": resultado.margen_error_ml,
+        },
+        "version": resultado.version,
+        "fecha_calculo": resultado.fecha_calculo.isoformat(),
+    }
+
+
+def snapshot_gancia(resultado: GanciaBlendResult, tinturas: Dict[str, Tintura]) -> dict:
+    """
+    Igual criterio que `snapshot_fernet`: tinturas resueltas a nombre,
+    no `tintura_id`. Incluye los aditivos (azucar/acido citrico/
+    caramelo) porque son parte de la receta de Gancia, no volumen de
+    la base - mismo criterio que `_filas_composicion_gancia` en
+    core/receta_reportes.py (que los separa en su propia seccion).
+    """
+    return {
+        "params": {
+            "volumen_objetivo_litros": resultado.params.volumen_objetivo_litros,
+            "abv_objetivo": resultado.params.abv_objetivo,
+            "vino_pct": resultado.params.vino_pct,
+            "vino_abv": resultado.params.vino_abv,
+            "alcohol_fortificacion_abv": resultado.params.alcohol_fortificacion_abv,
+            "azucar_pct_wv": resultado.params.azucar_pct_wv,
+        },
+        "composicion": {
+            "vino_ml": resultado.composicion.vino_ml,
+            "alcohol_fortificacion_ml": resultado.composicion.alcohol_fortificacion_ml,
+            "agua_ml": resultado.composicion.agua_ml,
+            "azucar_g": resultado.composicion.azucar_g,
+            "acido_citrico_g": resultado.composicion.acido_citrico_g,
+            "caramelo_ml": resultado.composicion.caramelo_ml,
+            "tinturas": [
+                {"nombre": tinturas[tintura_id].nombre, "ml": ml}
+                for tintura_id, ml in resultado.composicion.tinturas.items()
+                if tintura_id in tinturas
+            ],
+        },
+        "resultado_calculado": {
+            "abv_calculado": resultado.abv_calculado,
+            "azucar_efectiva_g_l": resultado.azucar_efectiva_g_l,
+            "volumen_real_ml": resultado.volumen_real_ml,
         },
         "version": resultado.version,
         "fecha_calculo": resultado.fecha_calculo.isoformat(),

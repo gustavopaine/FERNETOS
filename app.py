@@ -1518,14 +1518,25 @@ elif menu == "🍷 Ensamblaje Gancia":
         GanciaBlendResult,
         GanciaCalculator,
     )
-    from core.receta_reportes import generar_ficha_tecnica_blend_gancia
+    from core.receta_reportes import (
+        generar_ficha_tecnica_blend_gancia,
+        generar_ficha_tecnica_desde_historial_gancia,
+    )
     from core.tintura_models import Producto
+    from core.blend_models import BlendGuardado
+    from core.blend_repository import BlendRepository
+    from core.blend_snapshot import snapshot_gancia
 
     @st.cache_data(show_spinner=False)
     def _pdf_ficha_tecnica_gancia(resultado, tinturas_data):
         return generar_ficha_tecnica_blend_gancia(resultado, tinturas_data)
 
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_historial_gancia(blend_guardado):
+        return generar_ficha_tecnica_desde_historial_gancia(blend_guardado)
+
     gancia_calculator = GanciaCalculator()
+    blend_repo_gancia = BlendRepository(db)
 
     st.subheader("Crear Nuevo Blend de Gancia")
 
@@ -1814,6 +1825,114 @@ elif menu == "🍷 Ensamblaje Gancia":
         except Exception as e:
             st.error(f"Error generando la ficha técnica: {e}")
             st.session_state.pop("ensamblaje_gancia_resultado", None)
+
+        # Guardado explicito en el historial real (Fase 4, 2/N - mismo
+        # patron que Ensamblaje Fernet): no automatico, para no
+        # ensuciar el historial con cada ajuste exploratorio.
+        nombre_blend_gancia = st.text_input(
+            "Nombre para el historial (opcional)",
+            key="ensamblaje_gancia_nombre_historial",
+            placeholder='Ej. "Gancia Competencia 2026"',
+        )
+        if st.button("💾 Guardar en el historial", key="ensamblaje_gancia_guardar_historial", use_container_width=True):
+            try:
+                blend_guardado_gancia = BlendGuardado(
+                    familia="gancia",
+                    nombre=nombre_blend_gancia.strip() or None,
+                    datos=snapshot_gancia(resultado_gancia, tinturas_data_gancia),
+                )
+                blend_repo_gancia.guardar(blend_guardado_gancia)
+                st.success(f"✅ Guardado en el historial: {blend_guardado_gancia.id}")
+            except Exception as e:
+                st.error(f"Error guardando en el historial: {e}")
+
+    st.divider()
+
+    # Historial en un expander, no una tab: a diferencia de Ensamblaje
+    # Fernet, este bloque no usa st.tabs() - restructurarlo entero a
+    # tabs seria una edicion grande y riesgosa sobre ~300 lineas ya
+    # existentes (mismo tipo de edicion donde aparecio el bug de
+    # indentacion de st.rerun() en el slice de Fernet). Un expander al
+    # final logra el mismo resultado (historial fuera del flujo
+    # principal) sin tocar la estructura existente.
+    with st.expander("📋 Historial de Blends de Gancia"):
+        blends_guardados_gancia = blend_repo_gancia.listar(familia="gancia")
+
+        if not blends_guardados_gancia:
+            st.info("Todavía no guardaste ningún blend. Calculá uno arriba y usá 'Guardar en el historial'.")
+        else:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Fecha": b.fecha_guardado.strftime("%d/%m/%Y %H:%M"),
+                            "Nombre": b.nombre or b.id,
+                            "ABV": f"{b.datos['resultado_calculado']['abv_calculado']:.2f}%",
+                            "Volumen (L)": f"{b.datos['resultado_calculado']['volumen_real_ml']/1000:.2f}",
+                            "Tinturas": len(b.datos["composicion"]["tinturas"]),
+                        }
+                        for b in blends_guardados_gancia
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.divider()
+            st.subheader("🔍 Detalle")
+            opciones_historial_gancia = {b.id: (b.nombre or b.id) for b in blends_guardados_gancia}
+            id_seleccionado_gancia = st.selectbox(
+                "Ver detalle de",
+                options=list(opciones_historial_gancia.keys()),
+                format_func=lambda bid: opciones_historial_gancia[bid],
+                key="ensamblaje_gancia_historial_detalle",
+            )
+            # Mismo criterio que Ensamblaje Fernet: next(..., None) +
+            # guardia explicita, no next() sin default (hallazgo de
+            # /code-review high sobre el slice de Fernet).
+            blend_detalle_gancia = next(
+                (b for b in blends_guardados_gancia if b.id == id_seleccionado_gancia), None
+            )
+
+            if blend_detalle_gancia is None:
+                st.info("Elegí un blend guardado para ver su detalle.")
+            else:
+                col_hg1, col_hg2 = st.columns(2)
+                with col_hg1:
+                    with st.container(border=True):
+                        st.write("**Parámetros:**")
+                        st.write(f"- Volumen objetivo: {blend_detalle_gancia.datos['params']['volumen_objetivo_litros']:.2f} L")
+                        st.write(f"- ABV objetivo: {blend_detalle_gancia.datos['params']['abv_objetivo']:.1f}%")
+                        st.write("**Resultado calculado:**")
+                        st.write(f"- ABV: {blend_detalle_gancia.datos['resultado_calculado']['abv_calculado']:.2f}%")
+                        st.write(f"- Volumen real: {blend_detalle_gancia.datos['resultado_calculado']['volumen_real_ml']/1000:.2f} L")
+
+                with col_hg2:
+                    with st.container(border=True):
+                        st.write("**Composición:**")
+                        st.write(f"- Vino base: {blend_detalle_gancia.datos['composicion']['vino_ml']:.0f} ml")
+                        st.write(f"- Alcohol fortificación: {blend_detalle_gancia.datos['composicion']['alcohol_fortificacion_ml']:.0f} ml")
+                        st.write(f"- Agua: {blend_detalle_gancia.datos['composicion']['agua_ml']:.0f} ml")
+                        st.write(f"- Azúcar: {blend_detalle_gancia.datos['composicion']['azucar_g']:.0f} g")
+                        for t in blend_detalle_gancia.datos["composicion"]["tinturas"]:
+                            st.write(f"- {t['nombre']}: {t['ml']:.0f} ml")
+
+                try:
+                    pdf_ficha_historial_gancia = _pdf_ficha_tecnica_historial_gancia(blend_detalle_gancia)
+                    st.download_button(
+                        "📄 Descargar ficha técnica (PDF)",
+                        data=pdf_ficha_historial_gancia,
+                        file_name=f"ficha_tecnica_{blend_detalle_gancia.id}.pdf",
+                        mime="application/pdf",
+                        key=f"ensamblaje_gancia_historial_pdf_{blend_detalle_gancia.id}",
+                    )
+                except Exception as e:
+                    st.error(f"Error generando la ficha técnica: {e}")
+
+                if st.button("🗑️ Eliminar del historial", key="ensamblaje_gancia_eliminar_historial"):
+                    blend_repo_gancia.eliminar(blend_detalle_gancia.id)
+                    st.success("Eliminado.")
+                    st.rerun()
 
 # =========================================================
 # MÓDULO DE ENSAMBLAJE CAMPARI - INFUSIÓN DIRECTA

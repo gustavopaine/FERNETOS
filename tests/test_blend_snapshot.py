@@ -12,8 +12,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 
 from families.fernet.calculator import BlendParams, BlendResult, ComposicionBlend
+from families.gancia.gancia_calculator import (
+    ComposicionBlendGancia,
+    GanciaBlendParams,
+    GanciaBlendResult,
+)
 from core.tintura_models import Tintura
-from core.blend_snapshot import snapshot_fernet
+from core.blend_snapshot import snapshot_fernet, snapshot_gancia
 
 
 def _resultado(tinturas_ml=None):
@@ -76,4 +81,69 @@ def test_snapshot_es_serializable_a_json():
     snapshot = snapshot_fernet(resultado, tinturas)
 
     # No debe lanzar - todo tiene que ser tipos nativos de JSON.
+    json.dumps(snapshot)
+
+
+# --- snapshot_gancia -------------------------------------------------
+
+
+def _resultado_gancia(tinturas_ml=None):
+    composicion = ComposicionBlendGancia(
+        vino_ml=7800.0,
+        alcohol_fortificacion_ml=1200.0,
+        tinturas={"T-1": 30.0} if tinturas_ml is None else tinturas_ml,
+        agua_ml=970.0,
+        azucar_g=1000.0,
+        acido_citrico_g=5.0,
+        caramelo_ml=2.0,
+    )
+    return GanciaBlendResult(
+        params=GanciaBlendParams(volumen_objetivo_litros=10.0),
+        composicion=composicion,
+        abv_calculado=17.1,
+        azucar_efectiva_g_l=100.0,
+    )
+
+
+def test_snapshot_gancia_resuelve_tinturas_a_nombre():
+    resultado = _resultado_gancia()
+    tinturas = {"T-1": Tintura(nombre="Cascara de naranja")}
+
+    snapshot = snapshot_gancia(resultado, tinturas)
+
+    nombres = [t["nombre"] for t in snapshot["composicion"]["tinturas"]]
+    assert nombres == ["Cascara de naranja"]
+
+
+def test_snapshot_gancia_omite_tintura_id_desconocido():
+    resultado = _resultado_gancia(tinturas_ml={"T-1": 30.0, "T-FANTASMA": 10.0})
+    tinturas = {"T-1": Tintura(nombre="Cascara de naranja")}
+
+    snapshot = snapshot_gancia(resultado, tinturas)
+
+    nombres = [t["nombre"] for t in snapshot["composicion"]["tinturas"]]
+    assert nombres == ["Cascara de naranja"]
+
+
+def test_snapshot_gancia_incluye_aditivos_y_resultado_calculado():
+    resultado = _resultado_gancia()
+    tinturas = {"T-1": Tintura(nombre="Cascara de naranja")}
+
+    snapshot = snapshot_gancia(resultado, tinturas)
+
+    assert snapshot["composicion"]["azucar_g"] == pytest.approx(1000.0)
+    assert snapshot["composicion"]["acido_citrico_g"] == pytest.approx(5.0)
+    assert snapshot["composicion"]["caramelo_ml"] == pytest.approx(2.0)
+    assert snapshot["resultado_calculado"]["abv_calculado"] == pytest.approx(17.1)
+    assert snapshot["resultado_calculado"]["azucar_efectiva_g_l"] == pytest.approx(100.0)
+
+
+def test_snapshot_gancia_es_serializable_a_json():
+    import json
+
+    resultado = _resultado_gancia()
+    tinturas = {"T-1": Tintura(nombre="Cascara de naranja")}
+
+    snapshot = snapshot_gancia(resultado, tinturas)
+
     json.dumps(snapshot)

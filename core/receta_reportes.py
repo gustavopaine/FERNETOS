@@ -336,6 +336,82 @@ def generar_ficha_tecnica_blend_gancia(
     )
 
 
+def _filas_composicion_desde_snapshot_gancia(composicion: dict) -> List[Tuple[str, float, str]]:
+    """
+    Igual que `_filas_composicion_gancia`, pero a partir de un dict ya
+    serializado (`BlendGuardado.datos["composicion"]`, ver
+    core/blend_snapshot.py::snapshot_gancia) en vez de un
+    `GanciaBlendResult` en vivo - las tinturas ya vienen resueltas a
+    nombre. Azucar/acido citrico/caramelo no van aca, mismo criterio
+    que `_filas_composicion_gancia` (van en la seccion "Aditivos").
+    """
+    total = (
+        composicion["vino_ml"]
+        + composicion["alcohol_fortificacion_ml"]
+        + composicion["agua_ml"]
+        + sum(t["ml"] for t in composicion["tinturas"])
+    )
+    if total <= 0:
+        raise ValueError("No se puede generar la ficha de un blend con volumen total 0")
+
+    filas = [
+        (t["nombre"], t["ml"], f"{(t['ml'] / total) * 100:.1f}%")
+        for t in composicion["tinturas"]
+    ]
+    vino_ml = composicion["vino_ml"]
+    fortificacion_ml = composicion["alcohol_fortificacion_ml"]
+    agua_ml = composicion["agua_ml"]
+    filas.append(("Vino base", vino_ml, f"{(vino_ml / total) * 100:.1f}%"))
+    filas.append(
+        ("Alcohol de fortificación", fortificacion_ml, f"{(fortificacion_ml / total) * 100:.1f}%")
+    )
+    filas.append(("Agua", agua_ml, f"{(agua_ml / total) * 100:.1f}%"))
+    return filas
+
+
+def generar_ficha_tecnica_desde_historial_gancia(blend: BlendGuardado) -> bytes:
+    """
+    Ficha tecnica de un `BlendGuardado` de Gancia (Fase 4, mismo patron
+    que `generar_ficha_tecnica_desde_historial_fernet`): lee de
+    `blend.datos` (el snapshot guardado) en vez de un
+    `GanciaBlendResult` en vivo. Devuelve los bytes del PDF.
+    """
+    datos = blend.datos
+    filas = _filas_composicion_desde_snapshot_gancia(datos["composicion"])
+
+    parametros = [
+        ("Volumen objetivo", f"{datos['params']['volumen_objetivo_litros']:.2f} L"),
+        ("ABV objetivo", f"{datos['params']['abv_objetivo']:.1f}%"),
+        ("% Vino sobre el volumen", f"{datos['params']['vino_pct'] * 100:.1f}%"),
+        ("Grado del vino base", f"{datos['params']['vino_abv']:.1f}%"),
+        (
+            "Grado del alcohol de fortificación",
+            f"{datos['params']['alcohol_fortificacion_abv']:.1f}%",
+        ),
+        ("Azúcar objetivo", f"{datos['params']['azucar_pct_wv']:.1f}% p/v"),
+    ]
+    aditivos = [
+        ("Azúcar", f"{datos['composicion']['azucar_g']:.0f} g"),
+        ("Ácido cítrico", f"{datos['composicion']['acido_citrico_g']:.1f} g"),
+        ("Caramelo E150", f"{datos['composicion']['caramelo_ml']:.1f} ml"),
+    ]
+    resultado_calculado = [
+        ("ABV calculado", f"{datos['resultado_calculado']['abv_calculado']:.2f}%"),
+        ("Azúcar efectiva", f"{datos['resultado_calculado']['azucar_efectiva_g_l']:.1f} g/L"),
+        ("Volumen real", f"{datos['resultado_calculado']['volumen_real_ml'] / 1000:.2f} L"),
+    ]
+
+    return _generar_pdf_ficha_tecnica(
+        f"Ficha Técnica - Gancia ({blend.nombre or blend.id})",
+        datetime.fromisoformat(datos["fecha_calculo"]),
+        filas,
+        resultado_calculado,
+        version=datos.get("version"),
+        parametros=parametros,
+        secciones_extra=[("Aditivos", aditivos)],
+    )
+
+
 def _filas_botanicos(ingredientes: List[ComposicionBotanica]) -> List[Tuple[str, str]]:
     """Una fila por botanico: nombre + parte utilizada -> cantidad (en
     gramos si la receta usa cantidades absolutas, como Campari; en %

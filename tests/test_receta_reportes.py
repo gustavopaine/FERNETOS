@@ -26,7 +26,7 @@ from families.campari.campari_calculator import CampariBlendResult, ComposicionC
 from families.gancia.americano_calculator import ComposicionAmericano, VarianteExperimental
 from core.tintura_models import ComposicionBotanica, ControlCalidad, Tintura
 from core.blend_models import BlendGuardado
-from core.blend_snapshot import snapshot_fernet
+from core.blend_snapshot import snapshot_fernet, snapshot_gancia
 from core.receta_reportes import (
     _filas_composicion_fernet,
     _filas_composicion_gancia,
@@ -34,11 +34,13 @@ from core.receta_reportes import (
     _filas_botanicos,
     _filas_ingredientes_americano,
     _filas_composicion_desde_snapshot_fernet,
+    _filas_composicion_desde_snapshot_gancia,
     generar_ficha_tecnica_blend_fernet,
     generar_ficha_tecnica_blend_gancia,
     generar_ficha_tecnica_blend_campari,
     generar_ficha_tecnica_variante_americano,
     generar_ficha_tecnica_desde_historial_fernet,
+    generar_ficha_tecnica_desde_historial_gancia,
 )
 
 
@@ -465,5 +467,63 @@ def test_generar_ficha_tecnica_desde_historial_fernet_sin_nombre_usa_id():
     blend = _blend_guardado_fernet(nombre=None)
 
     pdf = generar_ficha_tecnica_desde_historial_fernet(blend)
+
+    assert pdf.startswith(b"%PDF")
+
+
+# --- generar_ficha_tecnica_desde_historial_gancia (Fase 4, 2/N) ----------
+
+
+def _blend_guardado_gancia(nombre="Gancia Competencia 2026", **overrides):
+    resultado = _resultado_gancia(**overrides)
+    tinturas = {"T-1": Tintura(nombre="Cascara de naranja")}
+    return BlendGuardado(
+        familia="gancia",
+        nombre=nombre,
+        datos=snapshot_gancia(resultado, tinturas),
+    )
+
+
+def test_filas_composicion_desde_snapshot_gancia_incluye_tinturas_y_base():
+    blend = _blend_guardado_gancia()
+
+    filas = _filas_composicion_desde_snapshot_gancia(blend.datos["composicion"])
+
+    nombres = [f[0] for f in filas]
+    assert nombres == [
+        "Cascara de naranja", "Vino base", "Alcohol de fortificación", "Agua",
+    ]
+
+
+def test_filas_composicion_desde_snapshot_gancia_porcentajes_suman_100():
+    blend = _blend_guardado_gancia()
+
+    filas = _filas_composicion_desde_snapshot_gancia(blend.datos["composicion"])
+
+    total_pct = sum(float(pct.rstrip("%")) for _, _, pct in filas)
+    assert total_pct == pytest.approx(100.0, abs=0.1)
+
+
+def test_filas_composicion_desde_snapshot_gancia_volumen_cero_lanza():
+    blend = _blend_guardado_gancia(tinturas_ml={}, vino_ml=0.0, alcohol_fortificacion_ml=0.0, agua_ml=0.0)
+
+    with pytest.raises(ValueError):
+        _filas_composicion_desde_snapshot_gancia(blend.datos["composicion"])
+
+
+def test_generar_ficha_tecnica_desde_historial_gancia_produce_pdf_valido():
+    blend = _blend_guardado_gancia()
+
+    pdf = generar_ficha_tecnica_desde_historial_gancia(blend)
+
+    assert isinstance(pdf, bytes)
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 500
+
+
+def test_generar_ficha_tecnica_desde_historial_gancia_sin_nombre_usa_id():
+    blend = _blend_guardado_gancia(nombre=None)
+
+    pdf = generar_ficha_tecnica_desde_historial_gancia(blend)
 
     assert pdf.startswith(b"%PDF")
