@@ -1010,6 +1010,7 @@ elif menu == "🧮 Ensamblaje":
         st.stop()
 
     from families.fernet.calculator import BlendParams
+    from core.receta_reportes import generar_ficha_tecnica_blend_fernet
 
     tabs = st.tabs(["🧪 Nuevo Blend", "📋 Historial", "📊 Análisis"])
 
@@ -1286,9 +1287,20 @@ elif menu == "🧮 Ensamblaje":
                                 hide_index=True,
                             )
 
-                            # Botón para guardar blend (opcional)
-                            if st.button("💾 Guardar Receta", use_container_width=True):
-                                st.info("Funcionalidad de guardado en desarrollo")
+                            # El blend no se persiste todavia (ver docs/specs/
+                            # 2026-09-08-fase3-ficha-tecnica-blend.md), asi que
+                            # la ficha tecnica se genera al vuelo a partir del
+                            # calculo actual en vez de un blend guardado.
+                            pdf_ficha_tecnica = generar_ficha_tecnica_blend_fernet(
+                                resultado, tinturas_data
+                            )
+                            st.download_button(
+                                "📄 Descargar ficha técnica (PDF)",
+                                data=pdf_ficha_tecnica,
+                                file_name=f"ficha_tecnica_{resultado.id}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                            )
 
                         except Exception as e:
                             st.error(f"Error calculando blend: {e}")
