@@ -77,6 +77,12 @@ def test_jurado_peso_voto_personalizado():
     assert jurado.peso_voto == 1.5
 
 
+@pytest.mark.parametrize("peso_voto", [0.0, -1.0])
+def test_jurado_peso_voto_no_positivo_lanza(peso_voto):
+    with pytest.raises(ValueError):
+        Jurado(nombre="Ana", rol=RolJurado.SOMMELIER, peso_voto=peso_voto)
+
+
 @pytest.mark.parametrize("visual,aroma,sabor_boca", [(1, 1, 1), (10, 10, 10), (5, 7, 8)])
 def test_puntaje_subpuntajes_validos_no_lanza(visual, aroma, sabor_boca):
     Puntaje(muestra_id="M-1", jurado_id="J-1", visual=visual, aroma=aroma, sabor_boca=sabor_boca)

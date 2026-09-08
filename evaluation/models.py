@@ -102,6 +102,10 @@ class Jurado:
     id: str = field(default_factory=lambda: _nuevo_id("JUR"))
     peso_voto: float = 1.0
 
+    def __post_init__(self):
+        if self.peso_voto <= 0:
+            raise ValueError(f"'peso_voto' debe ser positivo: {self.peso_voto}")
+
 
 @dataclass
 class Puntaje:
