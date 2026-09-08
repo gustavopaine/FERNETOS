@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 
 from evaluation.models import (
+    AparicionHistorica,
     Categoria,
     Evento,
     Jurado,
@@ -31,6 +32,12 @@ def test_evento_defaults():
     assert evento.id
     assert evento.nombre == "Torneo Regional"
     assert evento.edicion_numero == 1
+
+
+@pytest.mark.parametrize("fecha", ["15/11/2026", "2026-13-40", "no-es-una-fecha", ""])
+def test_evento_fecha_invalida_lanza(fecha):
+    with pytest.raises(ValueError):
+        Evento(nombre="Torneo Regional", fecha=fecha, sede="Club X", edicion_numero=1)
 
 
 def test_categoria_familia_valida_no_lanza():
@@ -117,3 +124,17 @@ def test_ranking_creation():
     ranking = Ranking(categoria_id="C-1", muestra_id="M-1", puntaje_final=8.7, posicion=1)
     assert ranking.posicion == 1
     assert ranking.puntaje_final == pytest.approx(8.7)
+
+
+def test_aparicion_historica_defaults_sin_ranking_cerrado():
+    aparicion = AparicionHistorica(
+        evento_nombre="Torneo Regional",
+        evento_edicion_numero=1,
+        evento_fecha="2026-11-15",
+        categoria_familia="fernet",
+        categoria_submodalidad=SubModalidad.PURO,
+        muestra_id="M-1",
+        codigo_ciego="M-014",
+    )
+    assert aparicion.posicion is None
+    assert aparicion.puntaje_final is None

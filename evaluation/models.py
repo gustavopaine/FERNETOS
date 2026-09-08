@@ -56,6 +56,12 @@ class Evento:
     edicion_numero: int
     id: str = field(default_factory=lambda: _nuevo_id("EVT"))
 
+    def __post_init__(self):
+        try:
+            datetime.strptime(self.fecha, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError(f"'fecha' debe tener formato YYYY-MM-DD: {self.fecha!r}")
+
 
 @dataclass
 class Categoria:
@@ -150,3 +156,24 @@ class Ranking:
     muestra_id: str
     puntaje_final: float
     posicion: int
+
+
+@dataclass
+class AparicionHistorica:
+    """
+    Una participacion de una receta/productor en una categoria de un
+    evento (roadmap, seccion 5.5, "historico por productor/receta a
+    traves de ediciones"). `posicion`/`puntaje_final` quedan en None si
+    la ronda de esa categoria todavia no fue cerrada (ver
+    `evaluation.cierre_ronda`).
+    """
+
+    evento_nombre: str
+    evento_edicion_numero: int
+    evento_fecha: str
+    categoria_familia: str
+    categoria_submodalidad: SubModalidad
+    muestra_id: str
+    codigo_ciego: str
+    posicion: Optional[int] = None
+    puntaje_final: Optional[float] = None
