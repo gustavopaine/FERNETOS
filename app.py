@@ -1349,7 +1349,7 @@ elif menu == "🧮 Ensamblaje":
                     try:
                         blend_guardado = BlendGuardado(
                             familia="fernet",
-                            nombre=nombre_blend_fernet or None,
+                            nombre=nombre_blend_fernet.strip() or None,
                             datos=snapshot_fernet(resultado, tinturas_data),
                         )
                         blend_repo.guardar(blend_guardado)
