@@ -171,6 +171,8 @@ with st.sidebar:
             "📈 Curvas de Extracción",
             "🧮 Ensamblaje",
             "🍷 Ensamblaje Gancia",
+            "🍸 Ensamblaje Campari",
+            "🌿 Ensamblaje Americano",
             "🎯 Micromezclas",
             "🎯 Micromezclas Gancia",
             "⚖️ Pruebas A/B",
@@ -1189,156 +1191,163 @@ elif menu == "🧮 Ensamblaje":
 
                             st.error(traceback.format_exc())
 
-                if "ensamblaje_fernet_resultado" in st.session_state:
-                    resultado = st.session_state["ensamblaje_fernet_resultado"]
-                    tinturas_data = st.session_state["ensamblaje_fernet_tinturas_data"]
-
-                    st.success("✅ Blend calculado exitosamente!")
-                    st.caption(
-                        "Resultado del último cálculo. Si cambiaste algún "
-                        "parámetro arriba, presioná \"Calcular Blend\" de "
-                        "nuevo antes de descargar la ficha técnica."
-                    )
-
-                    # Mostrar resultados en columnas
-                    col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-
-                    with col_r1:
-                        with st.container(border=True):
-                            st.metric(
-                                "ABV Calculado",
-                                f"{resultado.abv_calculado:.2f}%",
-                            )
-
-                    with col_r2:
-                        with st.container(border=True):
-                            st.metric(
-                                "Volumen total",
-                                f"{resultado.volumen_real_ml/1000:.2f}L",
-                            )
-
-                    with col_r3:
-                        with st.container(border=True):
-                            st.metric(
-                                "Alcohol base",
-                                f"{resultado.composicion.alcohol_base_ml:.0f}ml",
-                            )
-
-                    with col_r4:
-                        with st.container(border=True):
-                            st.metric(
-                                "Agua base",
-                                f"{resultado.composicion.agua_base_ml:.0f}ml",
-                            )
-
-                    st.divider()
-
-                    # Mostrar composición completa
-                    st.subheader("📝 Receta Completa")
-
-                    col_receta1, col_receta2 = st.columns(2)
-
-                    with col_receta1:
-                        with st.container(border=True):
-                            st.write("**Base alcohólica:**")
-                            st.write(
-                                f"- Alcohol 96%: {resultado.composicion.alcohol_base_ml:.0f} ml"
-                            )
-                            st.write(
-                                f"- Agua: {resultado.composicion.agua_base_ml:.0f} ml"
-                            )
-                            st.write(
-                                f"- Azúcar: {resultado.composicion.azucar_g:.0f} g"
-                            )
-
-                    with col_receta2:
-                        with st.container(border=True):
-                            st.write("**Tinturas:**")
-                            for (
-                                tid,
-                                ml,
-                            ) in resultado.composicion.tinturas.items():
-                                t = tinturas_data.get(tid)
-                                if t:
-                                    st.write(f"- {t.nombre}: {ml:.0f} ml")
-
-                    # Tabla de porcentajes
-                    st.subheader("📊 Distribución Porcentual")
-
-                    data_porcentajes = []
-                    for tid, ml in resultado.composicion.tinturas.items():
-                        t = tinturas_data.get(tid)
-                        if t:
-                            porcentaje = (
-                                ml / resultado.composicion.volumen_total_ml
-                            ) * 100
-                            data_porcentajes.append(
-                                {
-                                    "Tintura": t.nombre,
-                                    "Volumen (ml)": ml,
-                                    "% del blend": f"{porcentaje:.1f}%",
-                                }
-                            )
-
-                    # Añadir alcohol y agua
-                    porcentaje_alcohol = (
-                        resultado.composicion.alcohol_base_ml
-                        / resultado.composicion.volumen_total_ml
-                    ) * 100
-                    porcentaje_agua = (
-                        resultado.composicion.agua_base_ml
-                        / resultado.composicion.volumen_total_ml
-                    ) * 100
-
-                    data_porcentajes.append(
-                        {
-                            "Tintura": "Alcohol 96%",
-                            "Volumen (ml)": resultado.composicion.alcohol_base_ml,
-                            "% del blend": f"{porcentaje_alcohol:.1f}%",
-                        }
-                    )
-
-                    data_porcentajes.append(
-                        {
-                            "Tintura": "Agua",
-                            "Volumen (ml)": resultado.composicion.agua_base_ml,
-                            "% del blend": f"{porcentaje_agua:.1f}%",
-                        }
-                    )
-
-                    df_porcentajes = pd.DataFrame(data_porcentajes)
-                    st.dataframe(
-                        df_porcentajes,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-
-                    # El blend no se persiste todavia (ver docs/specs/
-                    # 2026-09-08-fase3-ficha-tecnica-blend.md), asi que la
-                    # ficha tecnica se genera al vuelo a partir del calculo
-                    # actual en vez de un blend guardado. Envuelto en
-                    # try/except: a diferencia de las metricas de arriba
-                    # (formateo simple de datos ya validados), esto puede
-                    # lanzar (ej. volumen total 0) y sin este guard un error
-                    # tumbaba el rerun entero y quedaba repitiendose en cada
-                    # rerun siguiente mientras el resultado invalido siga en
-                    # session_state.
-                    try:
-                        pdf_ficha_tecnica = _pdf_ficha_tecnica_fernet(
-                            resultado, tinturas_data
-                        )
-                        st.download_button(
-                            "📄 Descargar ficha técnica (PDF)",
-                            data=pdf_ficha_tecnica,
-                            file_name=f"ficha_tecnica_{resultado.id}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                        )
-                    except Exception as e:
-                        st.error(f"Error generando la ficha técnica: {e}")
-                        st.session_state.pop("ensamblaje_fernet_resultado", None)
             else:
                 st.info("👆 Selecciona al menos una tintura para crear un blend")
+
+            # A nivel de la tab, no dentro de "if tinturas_seleccionadas:": un
+            # resultado ya calculado tiene que seguir visible (con su boton de
+            # descarga) aunque el usuario despues vacie la seleccion de
+            # tinturas en los number_input de arriba - el hallazgo de
+            # /code-review high que motivo este comentario era exactamente
+            # este bloque un nivel de indentacion mas adentro.
+            if "ensamblaje_fernet_resultado" in st.session_state:
+                resultado = st.session_state["ensamblaje_fernet_resultado"]
+                tinturas_data = st.session_state["ensamblaje_fernet_tinturas_data"]
+
+                st.success("✅ Blend calculado exitosamente!")
+                st.caption(
+                    "Resultado del último cálculo. Si cambiaste algún "
+                    "parámetro arriba, presioná \"Calcular Blend\" de "
+                    "nuevo antes de descargar la ficha técnica."
+                )
+
+                # Mostrar resultados en columnas
+                col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
+                with col_r1:
+                    with st.container(border=True):
+                        st.metric(
+                            "ABV Calculado",
+                            f"{resultado.abv_calculado:.2f}%",
+                        )
+
+                with col_r2:
+                    with st.container(border=True):
+                        st.metric(
+                            "Volumen total",
+                            f"{resultado.volumen_real_ml/1000:.2f}L",
+                        )
+
+                with col_r3:
+                    with st.container(border=True):
+                        st.metric(
+                            "Alcohol base",
+                            f"{resultado.composicion.alcohol_base_ml:.0f}ml",
+                        )
+
+                with col_r4:
+                    with st.container(border=True):
+                        st.metric(
+                            "Agua base",
+                            f"{resultado.composicion.agua_base_ml:.0f}ml",
+                        )
+
+                st.divider()
+
+                # Mostrar composición completa
+                st.subheader("📝 Receta Completa")
+
+                col_receta1, col_receta2 = st.columns(2)
+
+                with col_receta1:
+                    with st.container(border=True):
+                        st.write("**Base alcohólica:**")
+                        st.write(
+                            f"- Alcohol 96%: {resultado.composicion.alcohol_base_ml:.0f} ml"
+                        )
+                        st.write(
+                            f"- Agua: {resultado.composicion.agua_base_ml:.0f} ml"
+                        )
+                        st.write(
+                            f"- Azúcar: {resultado.composicion.azucar_g:.0f} g"
+                        )
+
+                with col_receta2:
+                    with st.container(border=True):
+                        st.write("**Tinturas:**")
+                        for (
+                            tid,
+                            ml,
+                        ) in resultado.composicion.tinturas.items():
+                            t = tinturas_data.get(tid)
+                            if t:
+                                st.write(f"- {t.nombre}: {ml:.0f} ml")
+
+                # Tabla de porcentajes
+                st.subheader("📊 Distribución Porcentual")
+
+                data_porcentajes = []
+                for tid, ml in resultado.composicion.tinturas.items():
+                    t = tinturas_data.get(tid)
+                    if t:
+                        porcentaje = (
+                            ml / resultado.composicion.volumen_total_ml
+                        ) * 100
+                        data_porcentajes.append(
+                            {
+                                "Tintura": t.nombre,
+                                "Volumen (ml)": ml,
+                                "% del blend": f"{porcentaje:.1f}%",
+                            }
+                        )
+
+                # Añadir alcohol y agua
+                porcentaje_alcohol = (
+                    resultado.composicion.alcohol_base_ml
+                    / resultado.composicion.volumen_total_ml
+                ) * 100
+                porcentaje_agua = (
+                    resultado.composicion.agua_base_ml
+                    / resultado.composicion.volumen_total_ml
+                ) * 100
+
+                data_porcentajes.append(
+                    {
+                        "Tintura": "Alcohol 96%",
+                        "Volumen (ml)": resultado.composicion.alcohol_base_ml,
+                        "% del blend": f"{porcentaje_alcohol:.1f}%",
+                    }
+                )
+
+                data_porcentajes.append(
+                    {
+                        "Tintura": "Agua",
+                        "Volumen (ml)": resultado.composicion.agua_base_ml,
+                        "% del blend": f"{porcentaje_agua:.1f}%",
+                    }
+                )
+
+                df_porcentajes = pd.DataFrame(data_porcentajes)
+                st.dataframe(
+                    df_porcentajes,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                # El blend no se persiste todavia (ver docs/specs/
+                # 2026-09-08-fase3-ficha-tecnica-blend.md), asi que la
+                # ficha tecnica se genera al vuelo a partir del calculo
+                # actual en vez de un blend guardado. Envuelto en
+                # try/except: a diferencia de las metricas de arriba
+                # (formateo simple de datos ya validados), esto puede
+                # lanzar (ej. volumen total 0) y sin este guard un error
+                # tumbaba el rerun entero y quedaba repitiendose en cada
+                # rerun siguiente mientras el resultado invalido siga en
+                # session_state.
+                try:
+                    pdf_ficha_tecnica = _pdf_ficha_tecnica_fernet(
+                        resultado, tinturas_data
+                    )
+                    st.download_button(
+                        "📄 Descargar ficha técnica (PDF)",
+                        data=pdf_ficha_tecnica,
+                        file_name=f"ficha_tecnica_{resultado.id}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.error(f"Error generando la ficha técnica: {e}")
+                    st.session_state.pop("ensamblaje_fernet_resultado", None)
 
     with tabs[1]:
         st.subheader("Historial de Blends")
@@ -1703,6 +1712,409 @@ elif menu == "🍷 Ensamblaje Gancia":
         except Exception as e:
             st.error(f"Error generando la ficha técnica: {e}")
             st.session_state.pop("ensamblaje_gancia_resultado", None)
+
+# =========================================================
+# MÓDULO DE ENSAMBLAJE CAMPARI - INFUSIÓN DIRECTA
+# =========================================================
+elif menu == "🍸 Ensamblaje Campari":
+    st.title("🍸 Ensamblaje de Campari")
+    st.caption(
+        "Infusión directa (sin tinturas de stock) - receta real de "
+        "referencia, batch de 1.5L. Cantidades editables."
+    )
+
+    from families.campari.campari_calculator import CampariCalculator, ComposicionCampari
+    from core.tintura_models import ComposicionBotanica, ControlCalidad
+    from core.receta_reportes import generar_ficha_tecnica_blend_campari
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_campari(resultado):
+        return generar_ficha_tecnica_blend_campari(resultado)
+
+    # (especie, parte_utilizada, gramos de referencia, unidad mostrada en el
+    # label). "unidad" para las cascaras: la receta real las cuenta como "1
+    # unidad" entera, no como peso - ver docs/specs/2026-09-06-campari-cuarto-producto.md.
+    INGREDIENTES_MACERACION_REF = [
+        ("ajenjo", "hoja", 10.0, "g"),
+        ("quina", "corteza", 5.0, "g"),
+        ("genciana", "raiz", 5.0, "g"),
+        ("angelica", "raiz", 5.0, "g"),
+        ("ruibarbo", "raiz", 2.0, "g"),
+        ("chips_de_roble", "madera", 5.0, "g"),
+        ("naranja", "cascara", 1.0, "unidad"),
+        ("pomelo", "cascara", 1.0, "unidad"),
+        ("limon", "cascara", 1.0, "unidad"),
+    ]
+    INGREDIENTES_INCORPORACION_TARDIA_REF = [
+        ("hibiscus", "flor", 10.0, "g"),
+    ]
+
+    col1, col2 = st.columns(2)
+    with col1:
+        alcohol_ml_campari = st.number_input(
+            "Alcohol (ml)", min_value=100.0, value=1000.0, step=50.0
+        )
+        alcohol_abv_campari = st.number_input(
+            "Grado del alcohol (%)", min_value=20.0, max_value=96.0, value=40.0, step=1.0
+        )
+    with col2:
+        agua_ml_campari = st.number_input(
+            "Agua (ml)", min_value=0.0, value=500.0, step=50.0
+        )
+        azucar_g_campari = st.number_input(
+            "Azúcar (g)", min_value=0.0, value=225.0, step=5.0
+        )
+
+    st.subheader("🌿 Botánicos (maceración)")
+    gramos_maceracion_campari = {}
+    cols_maceracion = st.columns(3)
+    for i, (especie, parte, gramos_ref, unidad) in enumerate(INGREDIENTES_MACERACION_REF):
+        with cols_maceracion[i % 3]:
+            gramos_maceracion_campari[especie] = st.number_input(
+                f"{especie.replace('_', ' ').title()} ({unidad})",
+                min_value=0.0,
+                value=gramos_ref,
+                step=1.0,
+                key=f"campari_maceracion_{especie}",
+            )
+
+    st.subheader("🌺 Incorporación tardía")
+    st.caption(
+        "Se suma recién en los últimos días de maceración (aporte de "
+        "color) - sin lógica de timing todavía, solo se registra la cantidad."
+    )
+    gramos_incorporacion_campari = {}
+    for especie, parte, gramos_ref, unidad in INGREDIENTES_INCORPORACION_TARDIA_REF:
+        gramos_incorporacion_campari[especie] = st.number_input(
+            f"{especie.replace('_', ' ').title()} ({unidad})",
+            min_value=0.0,
+            value=gramos_ref,
+            step=1.0,
+            key=f"campari_incorporacion_{especie}",
+        )
+
+    st.subheader("🔬 Control de calidad (opcional)")
+    registrar_densidad_campari = st.checkbox("Registrar densidad medida (densímetro)")
+    densidad_campari = None
+    if registrar_densidad_campari:
+        densidad_campari = st.number_input(
+            "Densidad", value=1060.0, step=1.0,
+            help="Gravedad específica x1000, ej. 1060",
+        )
+
+    st.divider()
+
+    def _ingredientes_desde_gramos(referencia, gramos_por_especie):
+        # Solo los que tienen gramos > 0 - mismo criterio de "ml > 0" que
+        # usa la seleccion de tinturas de Fernet/Gancia para permitir sacar
+        # un ingrediente poniendo su cantidad en 0.
+        return [
+            ComposicionBotanica(
+                especie=especie, porcentaje=0.0, parte_utilizada=parte,
+                gramos=gramos_por_especie[especie],
+            )
+            for especie, parte, _, _ in referencia
+            if gramos_por_especie[especie] > 0
+        ]
+
+    if st.button("🍸 Calcular Blend de Campari", type="primary", use_container_width=True):
+        try:
+            composicion_campari = ComposicionCampari(
+                alcohol_ml=alcohol_ml_campari,
+                alcohol_abv=alcohol_abv_campari,
+                agua_ml=agua_ml_campari,
+                azucar_g=azucar_g_campari,
+                ingredientes_maceracion=_ingredientes_desde_gramos(
+                    INGREDIENTES_MACERACION_REF, gramos_maceracion_campari
+                ),
+                ingredientes_incorporacion_tardia=_ingredientes_desde_gramos(
+                    INGREDIENTES_INCORPORACION_TARDIA_REF, gramos_incorporacion_campari
+                ),
+            )
+            control_calidad_campari = (
+                ControlCalidad(densidad=densidad_campari)
+                if densidad_campari is not None
+                else None
+            )
+            resultado_campari = CampariCalculator.calcular_blend(
+                composicion_campari, control_calidad=control_calidad_campari
+            )
+            # Mismo patron que Fernet/Gancia: en session_state para que
+            # sobreviva al rerun que dispara el propio boton de descarga.
+            st.session_state["ensamblaje_campari_resultado"] = resultado_campari
+        except Exception as e:
+            st.error(f"Error calculando blend de Campari: {e}")
+            import traceback
+
+            st.error(traceback.format_exc())
+
+    if "ensamblaje_campari_resultado" in st.session_state:
+        resultado_campari = st.session_state["ensamblaje_campari_resultado"]
+
+        st.success("✅ Blend de Campari calculado exitosamente!")
+        st.caption(
+            "Resultado del último cálculo. Si cambiaste algún parámetro "
+            "arriba, presioná \"Calcular Blend de Campari\" de nuevo antes "
+            "de descargar la ficha técnica."
+        )
+
+        col_r1, col_r2, col_r3 = st.columns(3)
+        with col_r1:
+            with st.container(border=True):
+                st.metric("ABV Calculado", f"{resultado_campari.abv_calculado:.2f}%")
+        with col_r2:
+            with st.container(border=True):
+                st.metric(
+                    "Azúcar efectiva",
+                    f"{resultado_campari.azucar_efectiva_gpl:.0f} g/L",
+                )
+        with col_r3:
+            with st.container(border=True):
+                st.metric(
+                    "Volumen final",
+                    f"{resultado_campari.composicion.volumen_final_ml/1000:.2f}L",
+                )
+
+        if (
+            resultado_campari.control_calidad is not None
+            and resultado_campari.control_calidad.densidad is not None
+        ):
+            st.info(f"🔬 Densidad registrada: {resultado_campari.control_calidad.densidad:.0f}")
+
+        st.subheader("📝 Receta Completa")
+        col_receta1, col_receta2 = st.columns(2)
+        with col_receta1:
+            with st.container(border=True):
+                st.write("**Base líquida:**")
+                st.write(
+                    f"- Alcohol {resultado_campari.composicion.alcohol_abv:.0f}°: "
+                    f"{resultado_campari.composicion.alcohol_ml:.0f} ml"
+                )
+                st.write(f"- Agua: {resultado_campari.composicion.agua_ml:.0f} ml")
+                st.write(f"- Azúcar: {resultado_campari.composicion.azucar_g:.0f} g")
+
+        with col_receta2:
+            with st.container(border=True):
+                st.write("**Botánicos (maceración):**")
+                for ing in resultado_campari.composicion.ingredientes_maceracion:
+                    st.write(f"- {ing.especie.replace('_', ' ').title()}: {ing.gramos:.0f}")
+                if resultado_campari.composicion.ingredientes_incorporacion_tardia:
+                    st.write("**Incorporación tardía:**")
+                    for ing in resultado_campari.composicion.ingredientes_incorporacion_tardia:
+                        st.write(f"- {ing.especie.replace('_', ' ').title()}: {ing.gramos:.0f}")
+
+        try:
+            pdf_ficha_tecnica_campari = _pdf_ficha_tecnica_campari(resultado_campari)
+            st.download_button(
+                "📄 Descargar ficha técnica (PDF)",
+                data=pdf_ficha_tecnica_campari,
+                file_name=f"ficha_tecnica_campari_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.error(f"Error generando la ficha técnica: {e}")
+            st.session_state.pop("ensamblaje_campari_resultado", None)
+
+# =========================================================
+# MÓDULO DE ENSAMBLAJE AMERICANO - INFUSIÓN DIRECTA + VARIANTES
+# =========================================================
+elif menu == "🌿 Ensamblaje Americano":
+    st.title("🌿 Ensamblaje de Americano")
+    st.caption(
+        "Infusión directa (sin tinturas de stock). Receta base fija + "
+        "variantes experimentales contra Gancia comercial u otras marcas."
+    )
+
+    from families.gancia.americano_calculator import (
+        AmericanoCalculator,
+        ComposicionAmericano,
+        VarianteExperimental,
+    )
+    from core.tintura_models import ComposicionBotanica
+    from core.receta_reportes import generar_ficha_tecnica_variante_americano
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_americano(variante):
+        return generar_ficha_tecnica_variante_americano(variante)
+
+    # (especie, parte_utilizada). El CORE (genciana/melisa) es intocable -
+    # identidad del producto; los CORE-secundarios definen el estilo de la
+    # receta base actual; los OPCIONALES son el banco para variantes (ver
+    # docs/specs/2026-09-06-americano-variantes-experimentales.md).
+    INGREDIENTES_BASE_REF = [
+        ("genciana", "raiz"),
+        ("melisa", "hoja"),
+        ("canela", "corteza"),
+        ("anis_estrellado", "fruto"),
+        ("angelica", "raiz"),
+        ("enebro", "fruto"),
+        ("pomelo", "cascara"),
+        ("limon", "cascara"),
+        ("naranja", "cascara"),
+    ]
+    INGREDIENTES_OPCIONALES_REF = [
+        ("clavo_de_olor", "flor"),
+        ("galanga", "raiz"),
+        ("paico", "hoja"),
+        ("romero", "hoja"),
+    ]
+
+    batch_id_americano = st.text_input(
+        "Batch ID*",
+        value="AMERICANO_BASE_v1",
+        help='Identificador legible de esta preparación, ej. "AMERICANO_CLAVO_v1"',
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        alcohol_ml_americano = st.number_input(
+            "Alcohol (ml)", min_value=100.0, value=500.0, step=50.0
+        )
+        alcohol_abv_americano = st.number_input(
+            "Grado del alcohol (%)", min_value=20.0, max_value=96.0, value=96.0, step=1.0
+        )
+    with col2:
+        agua_ml_americano = st.number_input(
+            "Agua (ml)", min_value=0.0, value=3000.0, step=100.0,
+            help="Receta real de referencia: 3 a 5 litros",
+        )
+        azucar_g_americano = st.number_input(
+            "Azúcar (g)", min_value=0.0, value=900.0, step=50.0
+        )
+
+    st.subheader("🌱 Ingredientes base (receta actual)")
+    st.caption(
+        "Genciana y melisa son intocables (identidad del producto). "
+        "Sacar cualquiera de los demás define una receta distinta a la real."
+    )
+    incluir_base_americano = {}
+    cols_base = st.columns(3)
+    for i, (especie, parte) in enumerate(INGREDIENTES_BASE_REF):
+        with cols_base[i % 3]:
+            incluir_base_americano[especie] = st.checkbox(
+                especie.replace("_", " ").title(),
+                value=True,
+                key=f"americano_base_{especie}",
+            )
+
+    st.subheader("🧪 Variante (opcionales a agregar)")
+    incluir_opcional_americano = {}
+    cols_opcionales = st.columns(4)
+    for i, (especie, parte) in enumerate(INGREDIENTES_OPCIONALES_REF):
+        with cols_opcionales[i % 4]:
+            incluir_opcional_americano[especie] = st.checkbox(
+                especie.replace("_", " ").title(),
+                value=False,
+                key=f"americano_opcional_{especie}",
+            )
+
+    referencia_comercial_americano = st.text_area(
+        "Notas vs. referencia comercial (opcional)",
+        placeholder="Ej: Más herbal que Gancia comercial, menos dulce",
+    )
+
+    st.divider()
+
+    if st.button(
+        "🌿 Calcular Variante de Americano", type="primary", use_container_width=True
+    ):
+        if not batch_id_americano:
+            st.error("Completá el Batch ID.")
+        else:
+            try:
+                ingredientes_base = [
+                    ComposicionBotanica(especie=especie, porcentaje=0.0, parte_utilizada=parte)
+                    for especie, parte in INGREDIENTES_BASE_REF
+                    if incluir_base_americano[especie]
+                ]
+                ingredientes_variante = [
+                    ComposicionBotanica(especie=especie, porcentaje=0.0, parte_utilizada=parte)
+                    for especie, parte in INGREDIENTES_OPCIONALES_REF
+                    if incluir_opcional_americano[especie]
+                ]
+                composicion_americano = ComposicionAmericano(
+                    alcohol_ml=alcohol_ml_americano,
+                    alcohol_abv=alcohol_abv_americano,
+                    agua_ml=agua_ml_americano,
+                    azucar_g=azucar_g_americano,
+                    ingredientes_base=ingredientes_base,
+                    ingredientes_variante=ingredientes_variante,
+                )
+                variante_americano = VarianteExperimental(
+                    batch_id=batch_id_americano,
+                    composicion=composicion_americano,
+                    referencia_comercial=referencia_comercial_americano or None,
+                )
+                # Mismo patron que Fernet/Gancia/Campari: en session_state
+                # para que sobreviva al rerun que dispara el propio boton
+                # de descarga de la ficha tecnica.
+                st.session_state["ensamblaje_americano_variante"] = variante_americano
+            except Exception as e:
+                st.error(f"Error calculando la variante: {e}")
+                import traceback
+
+                st.error(traceback.format_exc())
+
+    if "ensamblaje_americano_variante" in st.session_state:
+        variante_americano = st.session_state["ensamblaje_americano_variante"]
+        composicion_americano = variante_americano.composicion
+
+        st.success(f"✅ Variante calculada: {variante_americano.batch_id}")
+        st.caption(
+            "Resultado del último cálculo. Si cambiaste algún parámetro "
+            "arriba, presioná \"Calcular Variante de Americano\" de nuevo "
+            "antes de descargar la ficha técnica."
+        )
+
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            with st.container(border=True):
+                st.metric("ABV Calculado", f"{variante_americano.abv_calculado:.2f}%")
+        with col_r2:
+            with st.container(border=True):
+                azucar_efectiva_americano = composicion_americano.azucar_g / (
+                    composicion_americano.volumen_total_ml / 1000
+                )
+                st.metric("Azúcar efectiva", f"{azucar_efectiva_americano:.0f} g/L")
+
+        st.subheader("📝 Receta Completa")
+        col_receta1, col_receta2 = st.columns(2)
+        with col_receta1:
+            with st.container(border=True):
+                st.write("**Base líquida:**")
+                st.write(
+                    f"- Alcohol {composicion_americano.alcohol_abv:.0f}°: "
+                    f"{composicion_americano.alcohol_ml:.0f} ml"
+                )
+                st.write(f"- Agua: {composicion_americano.agua_ml:.0f} ml")
+                st.write(f"- Azúcar: {composicion_americano.azucar_g:.0f} g")
+
+        with col_receta2:
+            with st.container(border=True):
+                st.write("**Ingredientes base:**")
+                for ing in composicion_americano.ingredientes_base:
+                    st.write(f"- {ing.especie.replace('_', ' ').title()} ({ing.parte_utilizada})")
+                if composicion_americano.ingredientes_variante:
+                    st.write("**Variante agregada:**")
+                    for ing in composicion_americano.ingredientes_variante:
+                        st.write(f"- {ing.especie.replace('_', ' ').title()} ({ing.parte_utilizada})")
+
+        if variante_americano.referencia_comercial:
+            st.info(f"📝 Notas: {variante_americano.referencia_comercial}")
+
+        try:
+            pdf_ficha_tecnica_americano = _pdf_ficha_tecnica_americano(variante_americano)
+            st.download_button(
+                "📄 Descargar ficha técnica (PDF)",
+                data=pdf_ficha_tecnica_americano,
+                file_name=f"ficha_tecnica_{variante_americano.batch_id}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.error(f"Error generando la ficha técnica: {e}")
+            st.session_state.pop("ensamblaje_americano_variante", None)
 
 # =========================================================
 # MÓDULO DE MICROMEZCLAS - VERSIÓN SIMPLIFICADA
