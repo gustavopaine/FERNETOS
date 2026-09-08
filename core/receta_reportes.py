@@ -3,16 +3,18 @@ Ficha tecnica exportable de un blend calculado (roadmap Fase 3, ultimo
 item de "Salidas del modulo": "Exportacion de ficha tecnica de
 receta, para eventual registro de marca o proveedor").
 
-Opera sobre el `BlendResult` que ya devuelve `FernetCalculator` en la
-UI de Ensamblaje - los blends no se persisten todavia (no hay
-"receta guardada" que buscar despues), asi que la ficha se genera al
-vuelo a partir del ultimo calculo, no de un lookup historico. No usa
-el modelo generico `core.receta_models.Receta` (sin datos reales, sin
+Opera sobre el `BlendResult`/`GanciaBlendResult` que ya devuelven
+`FernetCalculator`/`GanciaCalculator` en sus respectivas UI de
+Ensamblaje - los blends no se persisten todavia (no hay "receta
+guardada" que buscar despues), asi que la ficha se genera al vuelo a
+partir del ultimo calculo, no de un lookup historico. No usa el
+modelo generico `core.receta_models.Receta` (sin datos reales, sin
 UI - ver spec de esta fase).
 """
 
+from datetime import datetime
 from io import BytesIO
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -22,6 +24,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from core.tintura_models import Tintura
 from families.fernet.calculator import BlendResult
+from families.gancia.gancia_calculator import GanciaBlendResult
 
 _ESTILOS = getSampleStyleSheet()
 
@@ -45,6 +48,70 @@ _ESTILO_TABLA_CLAVE_VALOR = TableStyle(
 )
 
 
+def _generar_pdf_ficha_tecnica(
+    titulo: str,
+    version: str,
+    fecha_calculo: datetime,
+    parametros: List[Tuple[str, str]],
+    filas_composicion: List[Tuple[str, float, str]],
+    resultado_calculado: List[Tuple[str, str]],
+    aditivos: Optional[List[Tuple[str, str]]] = None,
+) -> bytes:
+    """
+    Renderer compartido: arma el PDF (titulo + parametros objetivo +
+    composicion + aditivos opcionales + resultado calculado) a partir
+    de datos ya resueltos a texto - agnostico de si el blend es de
+    Fernet, Gancia o cualquier familia futura. Las funciones publicas
+    por familia (`generar_ficha_tecnica_blend_fernet`/`_gancia`) arman
+    estas listas a partir de su propio `resultado` tipado y llaman a
+    esta funcion - evita duplicar el boilerplate de reportlab entre
+    familias (la duplicacion previa ya causo un bug real: la version
+    Gancia se olvido de setear `azucar_efectiva_g_l`).
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    contenido = [
+        Paragraph(titulo, _ESTILOS["Title"]),
+        Paragraph(
+            f"Versión {version} · Calculado el "
+            f"{fecha_calculo.strftime('%Y-%m-%d %H:%M')}",
+            _ESTILOS["Normal"],
+        ),
+        Spacer(1, 0.5 * cm),
+        Paragraph("Parámetros objetivo", _ESTILOS["Heading2"]),
+    ]
+
+    tabla_parametros = Table(parametros)
+    tabla_parametros.setStyle(_ESTILO_TABLA_CLAVE_VALOR)
+    contenido.append(tabla_parametros)
+    contenido.append(Spacer(1, 0.5 * cm))
+
+    contenido.append(Paragraph("Composición", _ESTILOS["Heading2"]))
+    encabezado = ["Componente", "Volumen (ml)", "% del blend"]
+    datos_composicion = [encabezado] + [
+        [nombre, f"{ml:.0f}", porcentaje] for nombre, ml, porcentaje in filas_composicion
+    ]
+    tabla_composicion = Table(datos_composicion, repeatRows=1)
+    tabla_composicion.setStyle(_ESTILO_TABLA_COMPOSICION)
+    contenido.append(tabla_composicion)
+    contenido.append(Spacer(1, 0.5 * cm))
+
+    if aditivos:
+        contenido.append(Paragraph("Aditivos", _ESTILOS["Heading2"]))
+        tabla_aditivos = Table(aditivos)
+        tabla_aditivos.setStyle(_ESTILO_TABLA_CLAVE_VALOR)
+        contenido.append(tabla_aditivos)
+        contenido.append(Spacer(1, 0.5 * cm))
+
+    contenido.append(Paragraph("Resultado calculado", _ESTILOS["Heading2"]))
+    tabla_resultado = Table(resultado_calculado)
+    tabla_resultado.setStyle(_ESTILO_TABLA_CLAVE_VALOR)
+    contenido.append(tabla_resultado)
+
+    doc.build(contenido)
+    return buffer.getvalue()
+
+
 def _filas_composicion_fernet(
     resultado: BlendResult, tinturas: Dict[str, Tintura]
 ) -> List[Tuple[str, float, str]]:
@@ -56,6 +123,9 @@ def _filas_composicion_fernet(
     esta funcion sino un dato incompleto en `tinturas`.
     """
     total = resultado.composicion.volumen_total_ml
+    if total <= 0:
+        raise ValueError("No se puede generar la ficha de un blend con volumen total 0")
+
     filas = []
     for tintura_id, ml in resultado.composicion.tinturas.items():
         tintura = tinturas.get(tintura_id)
@@ -78,54 +148,98 @@ def generar_ficha_tecnica_blend_fernet(
     calculado. Devuelve los bytes del PDF."""
     filas = _filas_composicion_fernet(resultado, tinturas)
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    contenido = [
-        Paragraph(f"Ficha Técnica - Fernet (blend {resultado.id})", _ESTILOS["Title"]),
-        Paragraph(
-            f"Versión {resultado.version} · Calculado el "
-            f"{resultado.fecha_calculo.strftime('%Y-%m-%d %H:%M')}",
-            _ESTILOS["Normal"],
-        ),
-        Spacer(1, 0.5 * cm),
-        Paragraph("Parámetros objetivo", _ESTILOS["Heading2"]),
+    parametros = [
+        ("Volumen objetivo", f"{resultado.params.volumen_objetivo_litros:.2f} L"),
+        ("ABV objetivo", f"{resultado.params.abv_objetivo:.1f}%"),
+        ("Azúcar objetivo", f"{resultado.params.azucar_objetivo_gpl} g/L"),
+        ("Alcohol base", f"{resultado.params.alcohol_base_abv:.1f}%"),
+        ("pH objetivo", f"{resultado.params.ph_objetivo:.1f}"),
+    ]
+    resultado_calculado = [
+        ("ABV calculado", f"{resultado.abv_calculado:.2f}%"),
+        ("Azúcar efectiva", f"{resultado.azucar_efectiva_gpl} g/L"),
+        ("pH estimado", f"{resultado.ph_estimado:.2f}"),
+        ("Volumen real", f"{resultado.volumen_real_ml / 1000:.2f} L"),
+        ("Margen de error", f"{resultado.margen_error_ml:.1f} ml"),
     ]
 
-    parametros = Table(
-        [
-            ["Volumen objetivo", f"{resultado.params.volumen_objetivo_litros:.2f} L"],
-            ["ABV objetivo", f"{resultado.params.abv_objetivo:.1f}%"],
-            ["Azúcar objetivo", f"{resultado.params.azucar_objetivo_gpl} g/L"],
-            ["Alcohol base", f"{resultado.params.alcohol_base_abv:.1f}%"],
-            ["pH objetivo", f"{resultado.params.ph_objetivo:.1f}"],
-        ]
+    return _generar_pdf_ficha_tecnica(
+        f"Ficha Técnica - Fernet (blend {resultado.id})",
+        resultado.version,
+        resultado.fecha_calculo,
+        parametros,
+        filas,
+        resultado_calculado,
     )
-    parametros.setStyle(_ESTILO_TABLA_CLAVE_VALOR)
-    contenido.append(parametros)
-    contenido.append(Spacer(1, 0.5 * cm))
 
-    contenido.append(Paragraph("Composición", _ESTILOS["Heading2"]))
-    encabezado = ["Componente", "Volumen (ml)", "% del blend"]
-    datos_composicion = [encabezado] + [
-        [nombre, f"{ml:.0f}", porcentaje] for nombre, ml, porcentaje in filas
+
+def _filas_composicion_gancia(
+    resultado: GanciaBlendResult, tinturas: Dict[str, Tintura]
+) -> List[Tuple[str, float, str]]:
+    """
+    Igual criterio que `_filas_composicion_fernet`: una fila por
+    tintura (resuelta a nombre, omitiendo `tintura_id` desconocidos) +
+    vino/alcohol de fortificacion/agua, con volumen y porcentaje sobre
+    `volumen_total_ml`. Azucar/acido citrico/caramelo no son volumen
+    de la base (van en la ficha como aditivos, no como % del blend) -
+    mismo criterio que Fernet no mete el azucar en esta tabla.
+    """
+    total = resultado.composicion.volumen_total_ml
+    if total <= 0:
+        raise ValueError("No se puede generar la ficha de un blend con volumen total 0")
+
+    filas = []
+    for tintura_id, ml in resultado.composicion.tinturas.items():
+        tintura = tinturas.get(tintura_id)
+        if tintura is None:
+            continue
+        filas.append((tintura.nombre, ml, f"{(ml / total) * 100:.1f}%"))
+
+    vino_ml = resultado.composicion.vino_ml
+    fortificacion_ml = resultado.composicion.alcohol_fortificacion_ml
+    agua_ml = resultado.composicion.agua_ml
+    filas.append(("Vino base", vino_ml, f"{(vino_ml / total) * 100:.1f}%"))
+    filas.append(
+        ("Alcohol de fortificación", fortificacion_ml, f"{(fortificacion_ml / total) * 100:.1f}%")
+    )
+    filas.append(("Agua", agua_ml, f"{(agua_ml / total) * 100:.1f}%"))
+    return filas
+
+
+def generar_ficha_tecnica_blend_gancia(
+    resultado: GanciaBlendResult, tinturas: Dict[str, Tintura]
+) -> bytes:
+    """Ficha tecnica de un blend de Gancia ya calculado: parametros
+    objetivo, composicion (tinturas resueltas a nombre), aditivos
+    (azucar/acido citrico/caramelo) y resultado calculado. Devuelve
+    los bytes del PDF."""
+    filas = _filas_composicion_gancia(resultado, tinturas)
+
+    parametros = [
+        ("Volumen objetivo", f"{resultado.params.volumen_objetivo_litros:.2f} L"),
+        ("ABV objetivo", f"{resultado.params.abv_objetivo:.1f}%"),
+        ("% Vino sobre el volumen", f"{resultado.params.vino_pct * 100:.1f}%"),
+        ("Grado del vino base", f"{resultado.params.vino_abv:.1f}%"),
+        ("Grado del alcohol de fortificación", f"{resultado.params.alcohol_fortificacion_abv:.1f}%"),
+        ("Azúcar objetivo", f"{resultado.params.azucar_pct_wv:.1f}% p/v"),
     ]
-    tabla_composicion = Table(datos_composicion, repeatRows=1)
-    tabla_composicion.setStyle(_ESTILO_TABLA_COMPOSICION)
-    contenido.append(tabla_composicion)
-    contenido.append(Spacer(1, 0.5 * cm))
+    aditivos = [
+        ("Azúcar", f"{resultado.composicion.azucar_g:.0f} g"),
+        ("Ácido cítrico", f"{resultado.composicion.acido_citrico_g:.1f} g"),
+        ("Caramelo E150", f"{resultado.composicion.caramelo_ml:.1f} ml"),
+    ]
+    resultado_calculado = [
+        ("ABV calculado", f"{resultado.abv_calculado:.2f}%"),
+        ("Azúcar efectiva", f"{resultado.azucar_efectiva_g_l:.1f} g/L"),
+        ("Volumen real", f"{resultado.volumen_real_ml / 1000:.2f} L"),
+    ]
 
-    contenido.append(Paragraph("Resultado calculado", _ESTILOS["Heading2"]))
-    resultado_calculado = Table(
-        [
-            ["ABV calculado", f"{resultado.abv_calculado:.2f}%"],
-            ["Azúcar efectiva", f"{resultado.azucar_efectiva_gpl} g/L"],
-            ["pH estimado", f"{resultado.ph_estimado:.2f}"],
-            ["Volumen real", f"{resultado.volumen_real_ml / 1000:.2f} L"],
-            ["Margen de error", f"{resultado.margen_error_ml:.1f} ml"],
-        ]
+    return _generar_pdf_ficha_tecnica(
+        f"Ficha Técnica - Gancia (blend {resultado.id})",
+        resultado.version,
+        resultado.fecha_calculo,
+        parametros,
+        filas,
+        resultado_calculado,
+        aditivos=aditivos,
     )
-    resultado_calculado.setStyle(_ESTILO_TABLA_CLAVE_VALOR)
-    contenido.append(resultado_calculado)
-
-    doc.build(contenido)
-    return buffer.getvalue()

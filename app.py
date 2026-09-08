@@ -1012,6 +1012,10 @@ elif menu == "🧮 Ensamblaje":
     from families.fernet.calculator import BlendParams
     from core.receta_reportes import generar_ficha_tecnica_blend_fernet
 
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_fernet(resultado, tinturas_data):
+        return generar_ficha_tecnica_blend_fernet(resultado, tinturas_data)
+
     tabs = st.tabs(["🧪 Nuevo Blend", "📋 Historial", "📊 Análisis"])
 
     with tabs[0]:
@@ -1171,142 +1175,168 @@ elif menu == "🧮 Ensamblaje":
                             resultado = calculator.calcular_blend_completo(
                                 params, tinturas_seleccionadas, tinturas_data
                             )
-
-                            st.success("✅ Blend calculado exitosamente!")
-
-                            # Mostrar resultados en columnas
-                            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-
-                            with col_r1:
-                                with st.container(border=True):
-                                    st.metric(
-                                        "ABV Calculado",
-                                        f"{resultado.abv_calculado:.2f}%",
-                                    )
-
-                            with col_r2:
-                                with st.container(border=True):
-                                    st.metric(
-                                        "Volumen total",
-                                        f"{resultado.volumen_real_ml/1000:.2f}L",
-                                    )
-
-                            with col_r3:
-                                with st.container(border=True):
-                                    st.metric(
-                                        "Alcohol base",
-                                        f"{resultado.composicion.alcohol_base_ml:.0f}ml",
-                                    )
-
-                            with col_r4:
-                                with st.container(border=True):
-                                    st.metric(
-                                        "Agua base",
-                                        f"{resultado.composicion.agua_base_ml:.0f}ml",
-                                    )
-
-                            st.divider()
-
-                            # Mostrar composición completa
-                            st.subheader("📝 Receta Completa")
-
-                            col_receta1, col_receta2 = st.columns(2)
-
-                            with col_receta1:
-                                with st.container(border=True):
-                                    st.write("**Base alcohólica:**")
-                                    st.write(
-                                        f"- Alcohol 96%: {resultado.composicion.alcohol_base_ml:.0f} ml"
-                                    )
-                                    st.write(
-                                        f"- Agua: {resultado.composicion.agua_base_ml:.0f} ml"
-                                    )
-                                    st.write(
-                                        f"- Azúcar: {resultado.composicion.azucar_g:.0f} g"
-                                    )
-
-                            with col_receta2:
-                                with st.container(border=True):
-                                    st.write("**Tinturas:**")
-                                    for (
-                                        tid,
-                                        ml,
-                                    ) in resultado.composicion.tinturas.items():
-                                        t = tinturas_data.get(tid)
-                                        if t:
-                                            st.write(f"- {t.nombre}: {ml:.0f} ml")
-
-                            # Tabla de porcentajes
-                            st.subheader("📊 Distribución Porcentual")
-
-                            data_porcentajes = []
-                            for tid, ml in resultado.composicion.tinturas.items():
-                                t = tinturas_data.get(tid)
-                                if t:
-                                    porcentaje = (
-                                        ml / resultado.composicion.volumen_total_ml
-                                    ) * 100
-                                    data_porcentajes.append(
-                                        {
-                                            "Tintura": t.nombre,
-                                            "Volumen (ml)": ml,
-                                            "% del blend": f"{porcentaje:.1f}%",
-                                        }
-                                    )
-
-                            # Añadir alcohol y agua
-                            porcentaje_alcohol = (
-                                resultado.composicion.alcohol_base_ml
-                                / resultado.composicion.volumen_total_ml
-                            ) * 100
-                            porcentaje_agua = (
-                                resultado.composicion.agua_base_ml
-                                / resultado.composicion.volumen_total_ml
-                            ) * 100
-
-                            data_porcentajes.append(
-                                {
-                                    "Tintura": "Alcohol 96%",
-                                    "Volumen (ml)": resultado.composicion.alcohol_base_ml,
-                                    "% del blend": f"{porcentaje_alcohol:.1f}%",
-                                }
+                            # En session_state para que sobreviva al rerun que
+                            # dispara el propio boton de descarga de la ficha
+                            # tecnica (si no, "Calcular Blend" evalua False en
+                            # ese rerun y todo este panel desaparece).
+                            st.session_state["ensamblaje_fernet_resultado"] = resultado
+                            st.session_state["ensamblaje_fernet_tinturas_data"] = (
+                                tinturas_data
                             )
-
-                            data_porcentajes.append(
-                                {
-                                    "Tintura": "Agua",
-                                    "Volumen (ml)": resultado.composicion.agua_base_ml,
-                                    "% del blend": f"{porcentaje_agua:.1f}%",
-                                }
-                            )
-
-                            df_porcentajes = pd.DataFrame(data_porcentajes)
-                            st.dataframe(
-                                df_porcentajes,
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-
-                            # El blend no se persiste todavia (ver docs/specs/
-                            # 2026-09-08-fase3-ficha-tecnica-blend.md), asi que
-                            # la ficha tecnica se genera al vuelo a partir del
-                            # calculo actual en vez de un blend guardado.
-                            pdf_ficha_tecnica = generar_ficha_tecnica_blend_fernet(
-                                resultado, tinturas_data
-                            )
-                            st.download_button(
-                                "📄 Descargar ficha técnica (PDF)",
-                                data=pdf_ficha_tecnica,
-                                file_name=f"ficha_tecnica_{resultado.id}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                            )
-
                         except Exception as e:
                             st.error(f"Error calculando blend: {e}")
                             import traceback
 
                             st.error(traceback.format_exc())
+
+                if "ensamblaje_fernet_resultado" in st.session_state:
+                    resultado = st.session_state["ensamblaje_fernet_resultado"]
+                    tinturas_data = st.session_state["ensamblaje_fernet_tinturas_data"]
+
+                    st.success("✅ Blend calculado exitosamente!")
+                    st.caption(
+                        "Resultado del último cálculo. Si cambiaste algún "
+                        "parámetro arriba, presioná \"Calcular Blend\" de "
+                        "nuevo antes de descargar la ficha técnica."
+                    )
+
+                    # Mostrar resultados en columnas
+                    col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
+                    with col_r1:
+                        with st.container(border=True):
+                            st.metric(
+                                "ABV Calculado",
+                                f"{resultado.abv_calculado:.2f}%",
+                            )
+
+                    with col_r2:
+                        with st.container(border=True):
+                            st.metric(
+                                "Volumen total",
+                                f"{resultado.volumen_real_ml/1000:.2f}L",
+                            )
+
+                    with col_r3:
+                        with st.container(border=True):
+                            st.metric(
+                                "Alcohol base",
+                                f"{resultado.composicion.alcohol_base_ml:.0f}ml",
+                            )
+
+                    with col_r4:
+                        with st.container(border=True):
+                            st.metric(
+                                "Agua base",
+                                f"{resultado.composicion.agua_base_ml:.0f}ml",
+                            )
+
+                    st.divider()
+
+                    # Mostrar composición completa
+                    st.subheader("📝 Receta Completa")
+
+                    col_receta1, col_receta2 = st.columns(2)
+
+                    with col_receta1:
+                        with st.container(border=True):
+                            st.write("**Base alcohólica:**")
+                            st.write(
+                                f"- Alcohol 96%: {resultado.composicion.alcohol_base_ml:.0f} ml"
+                            )
+                            st.write(
+                                f"- Agua: {resultado.composicion.agua_base_ml:.0f} ml"
+                            )
+                            st.write(
+                                f"- Azúcar: {resultado.composicion.azucar_g:.0f} g"
+                            )
+
+                    with col_receta2:
+                        with st.container(border=True):
+                            st.write("**Tinturas:**")
+                            for (
+                                tid,
+                                ml,
+                            ) in resultado.composicion.tinturas.items():
+                                t = tinturas_data.get(tid)
+                                if t:
+                                    st.write(f"- {t.nombre}: {ml:.0f} ml")
+
+                    # Tabla de porcentajes
+                    st.subheader("📊 Distribución Porcentual")
+
+                    data_porcentajes = []
+                    for tid, ml in resultado.composicion.tinturas.items():
+                        t = tinturas_data.get(tid)
+                        if t:
+                            porcentaje = (
+                                ml / resultado.composicion.volumen_total_ml
+                            ) * 100
+                            data_porcentajes.append(
+                                {
+                                    "Tintura": t.nombre,
+                                    "Volumen (ml)": ml,
+                                    "% del blend": f"{porcentaje:.1f}%",
+                                }
+                            )
+
+                    # Añadir alcohol y agua
+                    porcentaje_alcohol = (
+                        resultado.composicion.alcohol_base_ml
+                        / resultado.composicion.volumen_total_ml
+                    ) * 100
+                    porcentaje_agua = (
+                        resultado.composicion.agua_base_ml
+                        / resultado.composicion.volumen_total_ml
+                    ) * 100
+
+                    data_porcentajes.append(
+                        {
+                            "Tintura": "Alcohol 96%",
+                            "Volumen (ml)": resultado.composicion.alcohol_base_ml,
+                            "% del blend": f"{porcentaje_alcohol:.1f}%",
+                        }
+                    )
+
+                    data_porcentajes.append(
+                        {
+                            "Tintura": "Agua",
+                            "Volumen (ml)": resultado.composicion.agua_base_ml,
+                            "% del blend": f"{porcentaje_agua:.1f}%",
+                        }
+                    )
+
+                    df_porcentajes = pd.DataFrame(data_porcentajes)
+                    st.dataframe(
+                        df_porcentajes,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # El blend no se persiste todavia (ver docs/specs/
+                    # 2026-09-08-fase3-ficha-tecnica-blend.md), asi que la
+                    # ficha tecnica se genera al vuelo a partir del calculo
+                    # actual en vez de un blend guardado. Envuelto en
+                    # try/except: a diferencia de las metricas de arriba
+                    # (formateo simple de datos ya validados), esto puede
+                    # lanzar (ej. volumen total 0) y sin este guard un error
+                    # tumbaba el rerun entero y quedaba repitiendose en cada
+                    # rerun siguiente mientras el resultado invalido siga en
+                    # session_state.
+                    try:
+                        pdf_ficha_tecnica = _pdf_ficha_tecnica_fernet(
+                            resultado, tinturas_data
+                        )
+                        st.download_button(
+                            "📄 Descargar ficha técnica (PDF)",
+                            data=pdf_ficha_tecnica,
+                            file_name=f"ficha_tecnica_{resultado.id}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
+                    except Exception as e:
+                        st.error(f"Error generando la ficha técnica: {e}")
+                        st.session_state.pop("ensamblaje_fernet_resultado", None)
             else:
                 st.info("👆 Selecciona al menos una tintura para crear un blend")
 
@@ -1374,9 +1404,15 @@ elif menu == "🍷 Ensamblaje Gancia":
     from families.gancia.gancia_calculator import (
         ComposicionBlendGancia,
         GanciaBlendParams,
+        GanciaBlendResult,
         GanciaCalculator,
     )
+    from core.receta_reportes import generar_ficha_tecnica_blend_gancia
     from core.tintura_models import Producto
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_gancia(resultado, tinturas_data):
+        return generar_ficha_tecnica_blend_gancia(resultado, tinturas_data)
 
     gancia_calculator = GanciaCalculator()
 
@@ -1547,77 +1583,126 @@ elif menu == "🍷 Ensamblaje Gancia":
                     alcohol_fortificacion_abv=alcohol_fortificacion_abv_gancia,
                 )
 
-                st.success("✅ Blend de Gancia calculado exitosamente!")
-
-                if agua_ml < 0:
-                    st.warning(
-                        "⚠️ El agua remanente da negativo: el % de vino más las "
-                        "tinturas ya superan el volumen objetivo. Bajá el % de "
-                        "vino o el volumen de tinturas."
-                    )
-
-                col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-
-                with col_r1:
-                    with st.container(border=True):
-                        st.metric("ABV Calculado", f"{abv_calculado_gancia:.2f}%")
-
-                volumen_real_gancia_ml = GanciaCalculator.calcular_volumen_con_azucar(
-                    composicion_gancia.volumen_total_ml, composicion_gancia.azucar_g
+                resultado_gancia = GanciaBlendResult(
+                    params=params_gancia,
+                    composicion=composicion_gancia,
+                    abv_calculado=abv_calculado_gancia,
+                    # azucar_pct_wv es % p/v (g/100ml) dosificado contra el
+                    # volumen objetivo -> x10 para expresarlo en g/L. Mismo
+                    # criterio que Fernet: se ecoa el target dosificado, no
+                    # se recalcula contra el volumen real (igual que
+                    # calcular_blend_completo hace con azucar_efectiva_gpl).
+                    azucar_efectiva_g_l=azucar_pct_gancia * 10,
                 )
-
-                with col_r2:
-                    with st.container(border=True):
-                        st.metric(
-                            "Volumen total",
-                            f"{volumen_real_gancia_ml/1000:.2f}L",
-                        )
-
-                with col_r3:
-                    with st.container(border=True):
-                        st.metric("Vino base", f"{vino_ml:.0f}ml")
-
-                with col_r4:
-                    with st.container(border=True):
-                        st.metric(
-                            "Alcohol fortificación", f"{alcohol_fortificacion_ml:.0f}ml"
-                        )
-
-                st.divider()
-
-                st.subheader("📝 Receta Completa")
-
-                col_receta1, col_receta2 = st.columns(2)
-
-                with col_receta1:
-                    with st.container(border=True):
-                        st.write("**Base vínica:**")
-                        st.write(f"- Vino base ({vino_abv_gancia}%): {vino_ml:.0f} ml")
-                        st.write(
-                            f"- Alcohol fortificación ({alcohol_fortificacion_abv_gancia}%): "
-                            f"{alcohol_fortificacion_ml:.0f} ml"
-                        )
-                        st.write(f"- Agua: {agua_ml:.0f} ml")
-                        st.write(f"- Azúcar: {azucar_g:.0f} g")
-                        st.write(f"- Ácido cítrico: {composicion_gancia.acido_citrico_g:.1f} g")
-                        st.write(f"- Caramelo E150: {caramelo_gancia:.1f} ml")
-
-                with col_receta2:
-                    with st.container(border=True):
-                        st.write("**Tinturas:**")
-                        if tinturas_seleccionadas_gancia:
-                            for tid, ml in tinturas_seleccionadas_gancia.items():
-                                t = tinturas_data_gancia.get(tid)
-                                if t:
-                                    st.write(f"- {t.nombre}: {ml:.0f} ml")
-                        else:
-                            st.caption("Sin tinturas en este blend")
-
+                # En session_state para que sobreviva al rerun que dispara el
+                # propio boton de descarga de la ficha tecnica (ver el mismo
+                # fix en Ensamblaje Fernet, hallazgo de /code-review high).
+                st.session_state["ensamblaje_gancia_resultado"] = resultado_gancia
+                st.session_state["ensamblaje_gancia_tinturas_data"] = tinturas_data_gancia
+                st.session_state["ensamblaje_gancia_vino_abv"] = vino_abv_gancia
+                st.session_state["ensamblaje_gancia_fortificacion_abv"] = (
+                    alcohol_fortificacion_abv_gancia
+                )
             except Exception as e:
                 st.error(f"Error calculando blend de Gancia: {e}")
                 import traceback
 
                 st.error(traceback.format_exc())
+
+    if "ensamblaje_gancia_resultado" in st.session_state:
+        resultado_gancia = st.session_state["ensamblaje_gancia_resultado"]
+        tinturas_data_gancia = st.session_state["ensamblaje_gancia_tinturas_data"]
+        vino_abv_gancia = st.session_state["ensamblaje_gancia_vino_abv"]
+        alcohol_fortificacion_abv_gancia = st.session_state[
+            "ensamblaje_gancia_fortificacion_abv"
+        ]
+        composicion_gancia = resultado_gancia.composicion
+        vino_ml = composicion_gancia.vino_ml
+        alcohol_fortificacion_ml = composicion_gancia.alcohol_fortificacion_ml
+        agua_ml = composicion_gancia.agua_ml
+        azucar_g = composicion_gancia.azucar_g
+
+        st.success("✅ Blend de Gancia calculado exitosamente!")
+        st.caption(
+            "Resultado del último cálculo. Si cambiaste algún parámetro "
+            "arriba, presioná \"Calcular Blend de Gancia\" de nuevo antes "
+            "de descargar la ficha técnica."
+        )
+
+        if agua_ml < 0:
+            st.warning(
+                "⚠️ El agua remanente da negativo: el % de vino más las "
+                "tinturas ya superan el volumen objetivo. Bajá el % de "
+                "vino o el volumen de tinturas."
+            )
+
+        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
+        with col_r1:
+            with st.container(border=True):
+                st.metric("ABV Calculado", f"{resultado_gancia.abv_calculado:.2f}%")
+
+        with col_r2:
+            with st.container(border=True):
+                st.metric(
+                    "Volumen total",
+                    f"{resultado_gancia.volumen_real_ml/1000:.2f}L",
+                )
+
+        with col_r3:
+            with st.container(border=True):
+                st.metric("Vino base", f"{vino_ml:.0f}ml")
+
+        with col_r4:
+            with st.container(border=True):
+                st.metric(
+                    "Alcohol fortificación", f"{alcohol_fortificacion_ml:.0f}ml"
+                )
+
+        st.divider()
+
+        st.subheader("📝 Receta Completa")
+
+        col_receta1, col_receta2 = st.columns(2)
+
+        with col_receta1:
+            with st.container(border=True):
+                st.write("**Base vínica:**")
+                st.write(f"- Vino base ({vino_abv_gancia}%): {vino_ml:.0f} ml")
+                st.write(
+                    f"- Alcohol fortificación ({alcohol_fortificacion_abv_gancia}%): "
+                    f"{alcohol_fortificacion_ml:.0f} ml"
+                )
+                st.write(f"- Agua: {agua_ml:.0f} ml")
+                st.write(f"- Azúcar: {azucar_g:.0f} g")
+                st.write(f"- Ácido cítrico: {composicion_gancia.acido_citrico_g:.1f} g")
+                st.write(f"- Caramelo E150: {composicion_gancia.caramelo_ml:.1f} ml")
+
+        with col_receta2:
+            with st.container(border=True):
+                st.write("**Tinturas:**")
+                if composicion_gancia.tinturas:
+                    for tid, ml in composicion_gancia.tinturas.items():
+                        t = tinturas_data_gancia.get(tid)
+                        if t:
+                            st.write(f"- {t.nombre}: {ml:.0f} ml")
+                else:
+                    st.caption("Sin tinturas en este blend")
+
+        try:
+            pdf_ficha_tecnica_gancia = _pdf_ficha_tecnica_gancia(
+                resultado_gancia, tinturas_data_gancia
+            )
+            st.download_button(
+                "📄 Descargar ficha técnica (PDF)",
+                data=pdf_ficha_tecnica_gancia,
+                file_name=f"ficha_tecnica_{resultado_gancia.id}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.error(f"Error generando la ficha técnica: {e}")
+            st.session_state.pop("ensamblaje_gancia_resultado", None)
 
 # =========================================================
 # MÓDULO DE MICROMEZCLAS - VERSIÓN SIMPLIFICADA
