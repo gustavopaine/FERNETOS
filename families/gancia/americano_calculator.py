@@ -19,6 +19,7 @@ from typing import List, Optional
 
 from core.tintura_models import ComposicionBotanica
 from core.blend_math import abv_resultante
+from families.campari.campari_calculator import CampariCalculator
 from families.gancia.gancia_calculator import GanciaCalculator
 
 # Banco de botánicos. No se superponen entre sí (ver test dedicado) para
@@ -114,3 +115,8 @@ class AmericanoCalculator:
     # se reutiliza directamente en vez de duplicar la fórmula.
     calcular_azucar = staticmethod(GanciaCalculator.calcular_azucar)
     calcular_volumen_con_azucar = staticmethod(GanciaCalculator.calcular_volumen_con_azucar)
+    # Azúcar efectiva (g/L sobre el volumen final): misma formula exacta
+    # que Campari (azucar_g / litros, 0.0 si volumen es 0) - reutilizada
+    # en vez de duplicarla en cada lugar que la necesita (UI + ficha
+    # tecnica), que es justamente lo que ya habia pasado antes de esto.
+    calcular_azucar_efectiva_gpl = staticmethod(CampariCalculator.calcular_azucar_efectiva_gpl)

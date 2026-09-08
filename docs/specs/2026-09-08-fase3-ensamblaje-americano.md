@@ -1,4 +1,4 @@
-Status: Implementado, verificado en el navegador, pendiente /code-review high
+Status: Implementado, verificado en el navegador, /code-review high aplicado (2 hallazgos)
 
 # Fase 3 (6/N): UI de Ensamblaje Americano (variantes experimentales) + 2 hallazgos de (5/N)
 
@@ -64,6 +64,30 @@ Status: Implementado, verificado en el navegador, pendiente /code-review high
 - `AmericanoCalculator.escalar_blend()` (no existe, no se construyo -
   mismo deferred de la spec original).
 
+## Segunda pasada de /code-review high (sobre el commit 5415fa8)
+
+2 hallazgos reales, aplicados en un commit de seguimiento:
+
+- **Bug real: destildar los 9 checkboxes de ingredientes base crasheaba
+  la descarga de la ficha tecnica.** `generar_ficha_tecnica_variante_
+  americano` armaba la seccion "Ingredientes base" sin chequear si la
+  lista estaba vacia; `Table([])` de reportlab lanza `ValueError`. El
+  `try/except` de `app.py` lo atrapaba, pero pisaba en silencio la
+  variante calculada de `session_state` (perdiendo batch_id, notas y
+  selecciones del usuario) mostrando solo un error generico. Fix en la
+  raiz (no en el caller): `_generar_pdf_ficha_tecnica` ahora saltea
+  cualquier `secciones_extra` con filas vacias, protegiendo a
+  cualquier familia presente o futura sin que cada una tenga que
+  acordarse de pre-filtrar (Campari ya lo hacia por su cuenta en cada
+  seccion; Americano no).
+- **Formula de azucar efectiva duplicada** entre `app.py` (metrica en
+  pantalla) y `core/receta_reportes.py` (ficha tecnica) - exactamente
+  el tipo de divergencia silenciosa que ya paso una vez con Gancia en
+  (4/N). Fix: `AmericanoCalculator.calcular_azucar_efectiva_gpl`
+  (alias de `CampariCalculator.calcular_azucar_efectiva_gpl`, misma
+  formula exacta) como unica fuente de verdad, llamada desde ambos
+  lugares.
+
 ## Verificacion
 
 - `python -m pytest -q`: 236 passed (230 previos + 1 de regresion de
@@ -79,3 +103,9 @@ Status: Implementado, verificado en el navegador, pendiente /code-review high
   `%PDF-`). Fixes de Campari confirmados: con densidad en `0`, "Densidad
   registrada: 0" ahora se muestra (antes del fix quedaba oculto por el
   chequeo truthy). Sin errores de consola ni tracebacks en ningun paso.
+- Segunda pasada (fixes de la 2da ronda de review): destildados los 9
+  checkboxes de ingredientes base, calculado, descargada la ficha
+  tecnica sin error (`ficha_tecnica_AMERICANO_BASE_v1.pdf`, 2218 bytes,
+  `%PDF-`) - antes de este fix la descarga fallaba con un error
+  generico. `python -m pytest -q`: 239 passed (236 previos + 3 nuevos:
+  guard de secciones vacias, `calcular_azucar_efectiva_gpl` x2).

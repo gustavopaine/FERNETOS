@@ -317,23 +317,29 @@ def _ingrediente_americano(especie, parte="cascara"):
     return ComposicionBotanica(especie=especie, porcentaje=0, parte_utilizada=parte)
 
 
-def _composicion_americano(ingredientes_variante=None, agua_ml=3000.0, alcohol_ml=500.0):
+def _composicion_americano(
+    ingredientes_variante=None, agua_ml=3000.0, alcohol_ml=500.0, ingredientes_base=None
+):
     return ComposicionAmericano(
         alcohol_ml=alcohol_ml,
         alcohol_abv=96.0,
         agua_ml=agua_ml,
         azucar_g=900.0,
-        ingredientes_base=[
-            _ingrediente_americano("genciana", "raiz"),
-            _ingrediente_americano("melisa", "hoja"),
-            _ingrediente_americano("canela"),
-            _ingrediente_americano("anis_estrellado"),
-            _ingrediente_americano("angelica", "raiz"),
-            _ingrediente_americano("enebro"),
-            _ingrediente_americano("pomelo"),
-            _ingrediente_americano("limon"),
-            _ingrediente_americano("naranja"),
-        ],
+        ingredientes_base=(
+            [
+                _ingrediente_americano("genciana", "raiz"),
+                _ingrediente_americano("melisa", "hoja"),
+                _ingrediente_americano("canela"),
+                _ingrediente_americano("anis_estrellado"),
+                _ingrediente_americano("angelica", "raiz"),
+                _ingrediente_americano("enebro"),
+                _ingrediente_americano("pomelo"),
+                _ingrediente_americano("limon"),
+                _ingrediente_americano("naranja"),
+            ]
+            if ingredientes_base is None
+            else ingredientes_base
+        ),
         ingredientes_variante=ingredientes_variante or [],
     )
 
@@ -385,3 +391,14 @@ def test_generar_ficha_tecnica_americano_volumen_cero_lanza():
 
     with pytest.raises(ValueError):
         generar_ficha_tecnica_variante_americano(variante)
+
+
+def test_generar_ficha_tecnica_americano_sin_ingredientes_base_no_lanza():
+    """Regresion: destildar los 9 checkboxes de ingredientes base en la
+    UI deja ingredientes_base=[] - la seccion "Ingredientes base" no
+    debe intentar armar una Table([]) vacia (ValueError de reportlab)."""
+    variante = _variante_americano(ingredientes_base=[])
+
+    pdf = generar_ficha_tecnica_variante_americano(variante)
+
+    assert pdf.startswith(b"%PDF")

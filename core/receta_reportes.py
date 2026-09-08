@@ -25,7 +25,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from core.tintura_models import ComposicionBotanica, Tintura
 from families.campari.campari_calculator import CampariBlendResult
 from families.fernet.calculator import BlendResult
-from families.gancia.americano_calculator import VarianteExperimental
+from families.gancia.americano_calculator import AmericanoCalculator, VarianteExperimental
 from families.gancia.gancia_calculator import GanciaBlendResult
 
 _ESTILOS = getSampleStyleSheet()
@@ -110,6 +110,14 @@ def _generar_pdf_ficha_tecnica(
     contenido.append(Spacer(1, 0.5 * cm))
 
     for encabezado_seccion, filas_seccion in secciones_extra or []:
+        if not filas_seccion:
+            # Table([]) lanza ValueError ("must have at least a row and
+            # column"). Guardado acá (no en cada caller) para que
+            # cualquier familia presente o futura quede protegida sin
+            # tener que acordarse de pre-filtrar - Americano lo
+            # necesitaba (ingredientes_base puede quedar vacio si el
+            # usuario destilda los 9 checkboxes) y no lo tenia.
+            continue
         contenido.append(Paragraph(encabezado_seccion, _ESTILOS["Heading2"]))
         tabla_seccion = Table(filas_seccion)
         tabla_seccion.setStyle(_ESTILO_TABLA_CLAVE_VALOR)
@@ -395,7 +403,9 @@ def generar_ficha_tecnica_variante_americano(variante: VarianteExperimental) -> 
     if variante.referencia_comercial:
         secciones_extra.append(("Notas vs. referencia comercial", [("Nota", variante.referencia_comercial)]))
 
-    azucar_efectiva_g_l = composicion.azucar_g / (total / 1000)
+    azucar_efectiva_g_l = AmericanoCalculator.calcular_azucar_efectiva_gpl(
+        composicion.azucar_g, total
+    )
     resultado_calculado = [
         ("ABV calculado", f"{variante.abv_calculado:.2f}%"),
         ("Azúcar efectiva", f"{azucar_efectiva_g_l:.0f} g/L"),

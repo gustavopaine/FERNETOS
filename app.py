@@ -2073,8 +2073,8 @@ elif menu == "🌿 Ensamblaje Americano":
                 st.metric("ABV Calculado", f"{variante_americano.abv_calculado:.2f}%")
         with col_r2:
             with st.container(border=True):
-                azucar_efectiva_americano = composicion_americano.azucar_g / (
-                    composicion_americano.volumen_total_ml / 1000
+                azucar_efectiva_americano = AmericanoCalculator.calcular_azucar_efectiva_gpl(
+                    composicion_americano.azucar_g, composicion_americano.volumen_total_ml
                 )
                 st.metric("Azúcar efectiva", f"{azucar_efectiva_americano:.0f} g/L")
 

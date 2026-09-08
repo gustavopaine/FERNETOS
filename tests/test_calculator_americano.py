@@ -73,6 +73,23 @@ def test_calcular_abv_sin_agua_es_el_grado_del_alcohol():
     assert abv == pytest.approx(96.0)
 
 
+# --- Azucar efectiva: reutilizada de CampariCalculator (misma formula) ---
+
+
+def test_calcular_azucar_efectiva_gpl_900g_en_3500ml():
+    gpl = AmericanoCalculator.calcular_azucar_efectiva_gpl(
+        azucar_g=900.0, volumen_final_ml=3500.0
+    )
+    assert gpl == pytest.approx(900.0 / 3.5)
+
+
+def test_calcular_azucar_efectiva_gpl_volumen_cero_es_cero():
+    gpl = AmericanoCalculator.calcular_azucar_efectiva_gpl(
+        azucar_g=900.0, volumen_final_ml=0.0
+    )
+    assert gpl == 0.0
+
+
 # --- Banco de botánicos ---
 
 
