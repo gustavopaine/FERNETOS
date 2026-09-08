@@ -51,6 +51,7 @@ class DatabaseManager:
         self._migrar_tabla_compatibilidad_familias()
         self._migrar_tabla_recetas()
         self._migrar_tablas_evaluacion()
+        self._migrar_tabla_blends_guardados()
 
     def _migrar_columna_producto(self):
         """Agrega la columna 'producto' a tinturas si todavía no existe."""
@@ -109,6 +110,34 @@ class DatabaseManager:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia)"
+            )
+            conn.commit()
+
+    def _migrar_tabla_blends_guardados(self):
+        """Crea la tabla 'blends_guardados' si todavia no existe.
+
+        Tabla generica (un `datos_json` de forma libre) en vez de una
+        columna por campo: la composicion de un blend calculado difiere
+        demasiado entre familias (Fernet/Gancia usan tinturas de stock,
+        Campari/Americano botanicos por nombre) como para modelarla en
+        columnas fijas - mismo criterio ya usado para `ingredientes_json`
+        en la tabla `recetas`.
+        """
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS blends_guardados (
+                    id TEXT PRIMARY KEY,
+                    familia TEXT NOT NULL,
+                    nombre TEXT,
+                    fecha_guardado TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    datos_json TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_blends_guardados_familia "
+                "ON blends_guardados(familia)"
             )
             conn.commit()
 
@@ -317,6 +346,14 @@ class DatabaseManager:
             fecha_creacion TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS blends_guardados (
+            id TEXT PRIMARY KEY,
+            familia TEXT NOT NULL,
+            nombre TEXT,
+            fecha_guardado TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            datos_json TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS eventos (
             id TEXT PRIMARY KEY,
             nombre TEXT NOT NULL,
@@ -380,6 +417,7 @@ class DatabaseManager:
         CREATE INDEX IF NOT EXISTS idx_registros_tintura ON registros_curva(tintura_id);
         CREATE INDEX IF NOT EXISTS idx_compat_familias_tintura ON compatibilidad_familias(tintura_id);
         CREATE INDEX IF NOT EXISTS idx_recetas_familia ON recetas(familia);
+        CREATE INDEX IF NOT EXISTS idx_blends_guardados_familia ON blends_guardados(familia);
         CREATE INDEX IF NOT EXISTS idx_categorias_evento ON categorias(evento_id);
         CREATE INDEX IF NOT EXISTS idx_muestras_categoria ON muestras(categoria_id);
         CREATE INDEX IF NOT EXISTS idx_puntajes_muestra ON puntajes(muestra_id);

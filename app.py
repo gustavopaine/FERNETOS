@@ -1012,11 +1012,23 @@ elif menu == "🧮 Ensamblaje":
         st.stop()
 
     from families.fernet.calculator import BlendParams
-    from core.receta_reportes import generar_ficha_tecnica_blend_fernet
+    from core.receta_reportes import (
+        generar_ficha_tecnica_blend_fernet,
+        generar_ficha_tecnica_desde_historial_fernet,
+    )
+    from core.blend_models import BlendGuardado
+    from core.blend_repository import BlendRepository
+    from core.blend_snapshot import snapshot_fernet
 
     @st.cache_data(show_spinner=False)
     def _pdf_ficha_tecnica_fernet(resultado, tinturas_data):
         return generar_ficha_tecnica_blend_fernet(resultado, tinturas_data)
+
+    @st.cache_data(show_spinner=False)
+    def _pdf_ficha_tecnica_historial_fernet(blend_guardado):
+        return generar_ficha_tecnica_desde_historial_fernet(blend_guardado)
+
+    blend_repo = BlendRepository(db)
 
     tabs = st.tabs(["🧪 Nuevo Blend", "📋 Historial", "📊 Análisis"])
 
@@ -1324,16 +1336,33 @@ elif menu == "🧮 Ensamblaje":
                     hide_index=True,
                 )
 
-                # El blend no se persiste todavia (ver docs/specs/
-                # 2026-09-08-fase3-ficha-tecnica-blend.md), asi que la
-                # ficha tecnica se genera al vuelo a partir del calculo
-                # actual en vez de un blend guardado. Envuelto en
-                # try/except: a diferencia de las metricas de arriba
-                # (formateo simple de datos ya validados), esto puede
-                # lanzar (ej. volumen total 0) y sin este guard un error
-                # tumbaba el rerun entero y quedaba repitiendose en cada
-                # rerun siguiente mientras el resultado invalido siga en
-                # session_state.
+                # Guardado explicito en el historial real (roadmap Fase 4,
+                # docs/specs/2026-09-08-fase4-historial-blends-fernet.md) -
+                # no automatico, para no ensuciar el historial con cada
+                # ajuste exploratorio antes de llegar a la receta final.
+                nombre_blend_fernet = st.text_input(
+                    "Nombre para el historial (opcional)",
+                    key="ensamblaje_fernet_nombre_historial",
+                    placeholder='Ej. "Fernet Competencia 2026"',
+                )
+                if st.button("💾 Guardar en el historial", use_container_width=True):
+                    try:
+                        blend_guardado = BlendGuardado(
+                            familia="fernet",
+                            nombre=nombre_blend_fernet or None,
+                            datos=snapshot_fernet(resultado, tinturas_data),
+                        )
+                        blend_repo.guardar(blend_guardado)
+                        st.success(f"✅ Guardado en el historial: {blend_guardado.id}")
+                    except Exception as e:
+                        st.error(f"Error guardando en el historial: {e}")
+
+                # Ficha tecnica: envuelta en try/except - a diferencia de
+                # las metricas de arriba (formateo simple de datos ya
+                # validados), esto puede lanzar (ej. volumen total 0) y
+                # sin este guard un error tumbaba el rerun entero y
+                # quedaba repitiendose en cada rerun siguiente mientras el
+                # resultado invalido siga en session_state.
                 try:
                     pdf_ficha_tecnica = _pdf_ficha_tecnica_fernet(
                         resultado, tinturas_data
@@ -1351,20 +1380,93 @@ elif menu == "🧮 Ensamblaje":
 
     with tabs[1]:
         st.subheader("Historial de Blends")
-        st.info("📋 Historial de blends guardados - Próximamente")
 
-        # Placeholder para historial
-        data_historial = pd.DataFrame(
-            {
-                "Fecha": ["21/02/2026", "20/02/2026", "19/02/2026"],
-                "Blend ID": ["B-001", "B-002", "B-003"],
-                "Volumen (L)": [10, 5, 20],
-                "ABV": [40.2, 39.8, 41.0],
-                "Tinturas": [4, 3, 5],
-            }
-        )
+        blends_guardados_fernet = blend_repo.listar(familia="fernet")
 
-        st.dataframe(data_historial, use_container_width=True, hide_index=True)
+        if not blends_guardados_fernet:
+            st.info("Todavía no guardaste ningún blend. Calculá uno en 'Nuevo Blend' y usá 'Guardar en el historial'.")
+        else:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Fecha": b.fecha_guardado.strftime("%d/%m/%Y %H:%M"),
+                            "Nombre": b.nombre or b.id,
+                            "ABV": f"{b.datos['resultado_calculado']['abv_calculado']:.2f}%",
+                            "Volumen (L)": f"{b.datos['resultado_calculado']['volumen_real_ml']/1000:.2f}",
+                            "Tinturas": len(b.datos["composicion"]["tinturas"]),
+                        }
+                        for b in blends_guardados_fernet
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.divider()
+            st.subheader("🔍 Detalle")
+            opciones_historial = {b.id: (b.nombre or b.id) for b in blends_guardados_fernet}
+            id_seleccionado = st.selectbox(
+                "Ver detalle de",
+                options=list(opciones_historial.keys()),
+                format_func=lambda bid: opciones_historial[bid],
+                key="ensamblaje_fernet_historial_detalle",
+            )
+            # default=None + guardia explicita en vez de next() sin default:
+            # el selectbox esta keyed y sus opciones se recalculan en cada
+            # rerun desde blend_repo.listar() - si se borra un blend que no
+            # es el ultimo, el id que quedo en session_state para esta key
+            # puede no estar mas en la lista nueva. Streamlit hoy lo
+            # resuelve solo (cae a la primera opcion), pero depender de eso
+            # sin guardia rompe con un StopIteration crudo si esa
+            # resolucion cambia en otra version.
+            blend_detalle = next(
+                (b for b in blends_guardados_fernet if b.id == id_seleccionado), None
+            )
+
+            if blend_detalle is None:
+                st.info("Elegí un blend guardado para ver su detalle.")
+            else:
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    with st.container(border=True):
+                        st.write("**Parámetros:**")
+                        st.write(f"- Volumen objetivo: {blend_detalle.datos['params']['volumen_objetivo_litros']:.2f} L")
+                        st.write(f"- ABV objetivo: {blend_detalle.datos['params']['abv_objetivo']:.1f}%")
+                        st.write(f"- Azúcar objetivo: {blend_detalle.datos['params']['azucar_objetivo_gpl']} g/L")
+                        st.write("**Resultado calculado:**")
+                        st.write(f"- ABV: {blend_detalle.datos['resultado_calculado']['abv_calculado']:.2f}%")
+                        st.write(f"- Volumen real: {blend_detalle.datos['resultado_calculado']['volumen_real_ml']/1000:.2f} L")
+
+                with col_h2:
+                    with st.container(border=True):
+                        st.write("**Composición:**")
+                        st.write(f"- Alcohol 96%: {blend_detalle.datos['composicion']['alcohol_base_ml']:.0f} ml")
+                        st.write(f"- Agua: {blend_detalle.datos['composicion']['agua_base_ml']:.0f} ml")
+                        st.write(f"- Azúcar: {blend_detalle.datos['composicion']['azucar_g']:.0f} g")
+                        for t in blend_detalle.datos["composicion"]["tinturas"]:
+                            st.write(f"- {t['nombre']}: {t['ml']:.0f} ml")
+
+                # Ficha tecnica retroactiva (roadmap Fase 4, siguiente slice
+                # ya documentado como candidato natural en la spec de
+                # 1/N): el snapshot guardado tiene todo lo necesario, no
+                # hace falta un BlendResult en vivo.
+                try:
+                    pdf_ficha_historial = _pdf_ficha_tecnica_historial_fernet(blend_detalle)
+                    st.download_button(
+                        "📄 Descargar ficha técnica (PDF)",
+                        data=pdf_ficha_historial,
+                        file_name=f"ficha_tecnica_{blend_detalle.id}.pdf",
+                        mime="application/pdf",
+                        key=f"ensamblaje_fernet_historial_pdf_{blend_detalle.id}",
+                    )
+                except Exception as e:
+                    st.error(f"Error generando la ficha técnica: {e}")
+
+                if st.button("🗑️ Eliminar del historial", key="ensamblaje_fernet_eliminar_historial"):
+                    blend_repo.eliminar(blend_detalle.id)
+                    st.success("Eliminado.")
+                    st.rerun()
 
     with tabs[2]:
         st.subheader("Análisis de Blends")

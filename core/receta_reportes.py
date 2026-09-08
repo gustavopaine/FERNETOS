@@ -22,6 +22,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from core.blend_models import BlendGuardado
 from core.tintura_models import ComposicionBotanica, Tintura
 from families.campari.campari_calculator import CampariBlendResult
 from families.fernet.calculator import BlendResult
@@ -190,6 +191,75 @@ def generar_ficha_tecnica_blend_fernet(
         filas,
         resultado_calculado,
         version=resultado.version,
+        parametros=parametros,
+    )
+
+
+def _filas_composicion_desde_snapshot_fernet(
+    composicion: dict,
+) -> List[Tuple[str, float, str]]:
+    """
+    Igual que `_filas_composicion_fernet`, pero a partir de un dict ya
+    serializado (`BlendGuardado.datos["composicion"]`, ver
+    core/blend_snapshot.py::snapshot_fernet) en vez de un `BlendResult`
+    en vivo - las tinturas ya vienen resueltas a nombre (no hay
+    `tintura_id` que buscar, ni un `Tintura` que pueda faltar).
+    """
+    total = (
+        composicion["alcohol_base_ml"]
+        + composicion["agua_base_ml"]
+        + sum(t["ml"] for t in composicion["tinturas"])
+    )
+    if total <= 0:
+        raise ValueError("No se puede generar la ficha de un blend con volumen total 0")
+
+    filas = [
+        (t["nombre"], t["ml"], f"{(t['ml'] / total) * 100:.1f}%")
+        for t in composicion["tinturas"]
+    ]
+    alcohol_ml = composicion["alcohol_base_ml"]
+    agua_ml = composicion["agua_base_ml"]
+    filas.append(("Alcohol base", alcohol_ml, f"{(alcohol_ml / total) * 100:.1f}%"))
+    filas.append(("Agua", agua_ml, f"{(agua_ml / total) * 100:.1f}%"))
+    return filas
+
+
+def generar_ficha_tecnica_desde_historial_fernet(blend: BlendGuardado) -> bytes:
+    """
+    Ficha tecnica de un `BlendGuardado` de Fernet (roadmap Fase 4 -
+    "Historial de Blends" real): mismas secciones que
+    `generar_ficha_tecnica_blend_fernet`, pero leidas de
+    `blend.datos` (el snapshot guardado) en vez de un `BlendResult` en
+    vivo. Deliberadamente una funcion separada, no un branch dentro de
+    `generar_ficha_tecnica_blend_fernet`: las fuentes de datos son de
+    tipo distinto (dict serializado vs. dataclass en vivo) y forzarlas
+    a una sola funcion hubiera significado ramificar cada acceso a
+    campo. Devuelve los bytes del PDF.
+    """
+    datos = blend.datos
+    filas = _filas_composicion_desde_snapshot_fernet(datos["composicion"])
+
+    parametros = [
+        ("Volumen objetivo", f"{datos['params']['volumen_objetivo_litros']:.2f} L"),
+        ("ABV objetivo", f"{datos['params']['abv_objetivo']:.1f}%"),
+        ("Azúcar objetivo", f"{datos['params']['azucar_objetivo_gpl']} g/L"),
+        ("Alcohol base", f"{datos['params']['alcohol_base_abv']:.1f}%"),
+        ("pH objetivo", f"{datos['params']['ph_objetivo']:.1f}"),
+    ]
+    resultado_calculado = [
+        ("ABV calculado", f"{datos['resultado_calculado']['abv_calculado']:.2f}%"),
+        ("Azúcar efectiva", f"{datos['resultado_calculado']['azucar_efectiva_gpl']} g/L"),
+        ("pH estimado", f"{datos['resultado_calculado']['ph_estimado']:.2f}"),
+        ("Volumen real", f"{datos['resultado_calculado']['volumen_real_ml'] / 1000:.2f} L"),
+        ("Margen de error", f"{datos['resultado_calculado']['margen_error_ml']:.1f} ml"),
+    ]
+
+    return _generar_pdf_ficha_tecnica(
+        f"Ficha Técnica - Fernet ({blend.nombre or blend.id})",
+        datetime.fromisoformat(datos["fecha_calculo"]),
+        filas,
+        resultado_calculado,
+        version=datos.get("version"),
         parametros=parametros,
     )
 

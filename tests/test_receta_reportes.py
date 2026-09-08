@@ -25,16 +25,20 @@ from families.gancia.gancia_calculator import (
 from families.campari.campari_calculator import CampariBlendResult, ComposicionCampari
 from families.gancia.americano_calculator import ComposicionAmericano, VarianteExperimental
 from core.tintura_models import ComposicionBotanica, ControlCalidad, Tintura
+from core.blend_models import BlendGuardado
+from core.blend_snapshot import snapshot_fernet
 from core.receta_reportes import (
     _filas_composicion_fernet,
     _filas_composicion_gancia,
     _filas_composicion_campari,
     _filas_botanicos,
     _filas_ingredientes_americano,
+    _filas_composicion_desde_snapshot_fernet,
     generar_ficha_tecnica_blend_fernet,
     generar_ficha_tecnica_blend_gancia,
     generar_ficha_tecnica_blend_campari,
     generar_ficha_tecnica_variante_americano,
+    generar_ficha_tecnica_desde_historial_fernet,
 )
 
 
@@ -400,5 +404,66 @@ def test_generar_ficha_tecnica_americano_sin_ingredientes_base_no_lanza():
     variante = _variante_americano(ingredientes_base=[])
 
     pdf = generar_ficha_tecnica_variante_americano(variante)
+
+    assert pdf.startswith(b"%PDF")
+
+
+# --- generar_ficha_tecnica_desde_historial_fernet (Fase 4) ---------------
+
+
+def _blend_guardado_fernet(nombre="Fernet Competencia 2026", **overrides):
+    resultado = _resultado(**overrides)
+    tinturas = {"T-1": Tintura(nombre="Ajenjo"), "T-2": Tintura(nombre="Genciana")}
+    return BlendGuardado(
+        familia="fernet",
+        nombre=nombre,
+        datos=snapshot_fernet(resultado, tinturas),
+    )
+
+
+def test_filas_composicion_desde_snapshot_fernet_incluye_tinturas_y_base():
+    blend = _blend_guardado_fernet()
+
+    filas = _filas_composicion_desde_snapshot_fernet(blend.datos["composicion"])
+
+    nombres = [f[0] for f in filas]
+    assert "Ajenjo" in nombres
+    assert "Genciana" in nombres
+    assert "Alcohol base" in nombres
+    assert "Agua" in nombres
+
+
+def test_filas_composicion_desde_snapshot_fernet_porcentajes_suman_100():
+    blend = _blend_guardado_fernet()
+
+    filas = _filas_composicion_desde_snapshot_fernet(blend.datos["composicion"])
+
+    total_pct = sum(float(pct.rstrip("%")) for _, _, pct in filas)
+    assert total_pct == pytest.approx(100.0, abs=0.1)
+
+
+def test_filas_composicion_desde_snapshot_fernet_volumen_cero_lanza():
+    blend = _blend_guardado_fernet(tinturas_ml={}, alcohol_base_ml=0.0, agua_base_ml=0.0)
+
+    with pytest.raises(ValueError):
+        _filas_composicion_desde_snapshot_fernet(blend.datos["composicion"])
+
+
+def test_generar_ficha_tecnica_desde_historial_fernet_produce_pdf_valido():
+    blend = _blend_guardado_fernet()
+
+    pdf = generar_ficha_tecnica_desde_historial_fernet(blend)
+
+    assert isinstance(pdf, bytes)
+    assert pdf.startswith(b"%PDF")
+    assert len(pdf) > 500
+
+
+def test_generar_ficha_tecnica_desde_historial_fernet_sin_nombre_usa_id():
+    """Si el usuario no le puso nombre al guardar, la ficha no debe
+    lanzar - usa el id del blend guardado en el titulo."""
+    blend = _blend_guardado_fernet(nombre=None)
+
+    pdf = generar_ficha_tecnica_desde_historial_fernet(blend)
 
     assert pdf.startswith(b"%PDF")
