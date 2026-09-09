@@ -198,7 +198,6 @@ def generar_portada():
     # Tabla de metadatos
     datos_metadata = [
         ["Autor:", "Departamento pruebas"],
-        ["Responsable:", "Suboficial Gustavo Eduardo PaineFIL"],
         ["Revision:", "Trimestral"],
         ["Proxima actualizacion:", "Mayo 2026"],
     ]
