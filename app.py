@@ -2581,7 +2581,10 @@ elif menu == "🎯 Micromezclas":
         st.session_state.micro_iteraciones = []
         st.session_state.micro_blend_actual = None
 
-    tabs = st.tabs(["⚙️ Configuración", "📊 Iteraciones", "📈 Resultados"])
+    tabs = st.tabs(
+        ["⚙️ Configuración", "📊 Iteraciones", "📈 Resultados"],
+        key="micromezclas_fernet_tabs",
+    )
 
     # =========================================================
     # TAB 1: CONFIGURACIÓN INICIAL
@@ -3063,7 +3066,10 @@ elif menu == "🎯 Micromezclas Gancia":
         st.session_state.micro_gancia_iteraciones = []
         st.session_state.micro_gancia_blend_actual = None
 
-    tabs = st.tabs(["⚙️ Configuración", "📊 Iteraciones", "📈 Resultados"])
+    tabs = st.tabs(
+        ["⚙️ Configuración", "📊 Iteraciones", "📈 Resultados"],
+        key="micromezclas_gancia_tabs",
+    )
 
     # =========================================================
     # TAB 1: CONFIGURACIÓN INICIAL
@@ -3593,7 +3599,8 @@ elif menu == "⚖️ Pruebas A/B":
         st.session_state.prueba_actual = None
 
     tabs = st.tabs(
-        ["🎯 Nueva Prueba", "📊 Resultados", "📈 Análisis Competitivo", "📋 Historial"]
+        ["🎯 Nueva Prueba", "📊 Resultados", "📈 Análisis Competitivo", "📋 Historial"],
+        key="pruebas_ab_fernet_tabs",
     )
 
     # =========================================================
@@ -4159,7 +4166,8 @@ elif menu == "⚖️ Pruebas A/B Gancia":
         st.session_state.prueba_actual_gancia = None
 
     tabs = st.tabs(
-        ["🎯 Nueva Prueba", "📊 Resultados", "📈 Análisis Competitivo", "📋 Historial"]
+        ["🎯 Nueva Prueba", "📊 Resultados", "📈 Análisis Competitivo", "📋 Historial"],
+        key="pruebas_ab_gancia_tabs",
     )
 
     # =========================================================
